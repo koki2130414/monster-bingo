@@ -81,6 +81,11 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
 .topbar .inner { max-width: 460px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; }
 .banner { text-align: center; font-size: 12px; font-weight: 800; padding: 5px 12px; background: var(--witch-deep); }
 .banner.ended { background: var(--night-4); }
+.banner.paused { background: #6b5200; color: #ffe9a8; }
+.banner.offline { background: #4a1f1f; color: #ffd0d0; }
+.notice { display: flex; gap: 10px; align-items: flex-start; margin: 8px 16px 0; padding: 10px 12px; border-radius: 14px; background: linear-gradient(135deg, rgba(255,122,26,.25), rgba(174,123,255,.2)); border: 1px solid rgba(255,184,112,.45); font-weight: 800; font-size: 13px; line-height: 1.5; animation: pop .4s both; }
+.notice button { background: none; border: 0; color: inherit; font-size: 16px; line-height: 1; padding: 2px 4px; opacity: .7; }
+.guide-img { width: 100%; border-radius: 14px; display: block; }
 .pill { border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 800; background: rgba(255,255,255,.1); white-space: nowrap; }
 .pill.orange { background: rgba(255,122,26,.2); color: var(--pumpkin-soft); }
 .nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 4px 4px calc(8px + env(safe-area-inset-bottom, 0px)); background: rgba(11,10,16,.93); backdrop-filter: blur(14px); border-top: 1px solid var(--line); }
@@ -187,20 +192,34 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
   // ================================================================ 接続
   const CONFIG = window.MONSTER_BINGO_CONFIG || {};
   const SESSION_KEY = 'mb_session';
-  const POLL_MS = 4000;
+  const QUEUE_KEY = 'mb_scan_queue';
+  const NOTICE_KEY = 'mb_notice_closed';
+  // 状態の取りに行く間隔。変化が無ければ少しずつ広げ（最大20秒）、変化があればすぐ戻す。
+  //   「自分のQRを見せる」画面の間だけは3秒：まさに今読まれていて、相手と一緒に GET 演出を見たい瞬間だから。
+  //   120台が同じWi-Fiにいる会場では、1台あたりの問い合わせ回数がそのまま混雑になる。
+  const POLL = { show: 3000, base: 5000, max: 20000 };
 
   async function rpc(fn, args) {
-    const response = await fetch(`${CONFIG.supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/${fn}`, {
+    let response;
+    try {
+      response = await fetch(`${CONFIG.supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/${fn}`, {
       method: 'POST',
       headers: Object.assign({ 'Content-Type': 'application/json', apikey: CONFIG.supabaseAnonKey },
         // 旧形式の anon キー（JWT）の時だけ Authorization も付ける。新形式の Publishable key は apikey だけで通る
         /^eyJ/.test(CONFIG.supabaseAnonKey) ? { Authorization: `Bearer ${CONFIG.supabaseAnonKey}` } : {}),
       body: JSON.stringify(args || {}),
-    });
+      });
+    } catch (networkError) {
+      // 電波が無い・Wi-Fiが詰まっている。サーバーの「ダメ」とは分けて扱う（あとで送り直せる）
+      const error = new Error('電波が届いていないようです');
+      error.offline = true;
+      throw error;
+    }
     const body = await response.json().catch(() => null);
     if (!response.ok) {
       const error = new Error((body && body.message) || '通信に失敗しました');
       error.hint = body && body.hint;
+      error.offline = response.status >= 500 || response.status === 0;
       throw error;
     }
     return body;
@@ -279,10 +298,28 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
         }
       } catch (error) {
         if (error.hint === 'NOT_JOINED') storage.remove(SESSION_KEY);
+        if (error.hint === 'ABSENT') return renderAbsent();
+        if (error.offline) return renderOfflineBoot();
       }
     }
     if (eventCode) return renderEventTop();
     renderCodeEntry();
+  }
+
+  // 欠席扱い。ログイン情報は捨てない（運営が取り消せば、そのまま戻れるように）
+  function renderAbsent() {
+    stopPolling();
+    app.innerHTML = `<div class="center"><p style="font-size:56px">🕯️</p><p class="display" style="font-size:20px">いまは参加が止まっています</p>
+      <p class="muted">受付か運営スタッフに声をかけてください。<br>再開されると、この画面から自動で戻ります。</p></div>`;
+    clearTimeout(absentTimer);
+    absentTimer = setTimeout(boot, 20000);
+  }
+  let absentTimer = null;
+  function renderOfflineBoot() {
+    app.innerHTML = `<div class="center"><p style="font-size:56px">📡</p><p class="display" style="font-size:20px">電波が届いていないようです</p>
+      <p class="muted">電波が戻ったら自動でつながります。</p><button class="btn" id="retry" style="max-width:260px">もう一度試す</button></div>`;
+    document.getElementById('retry').onclick = boot;
+    window.addEventListener('online', boot, { once: true });
   }
 
   // ================================================================ 参加前
@@ -299,7 +336,9 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
           <button class="btn">イベントに参加</button>
         </form>
         <p class="faint">受付のQRコードを読み取った方は、そのまま参加できます。</p>
+        <button class="btn-ghost" id="toPin" style="max-width:320px;font-size:14px">🎫 受付カードのQRが読めない方（番号で入る）</button>
       </div>`;
+    document.getElementById('toPin').onclick = () => renderPinLogin();
     document.getElementById('codeForm').onsubmit = (e) => {
       e.preventDefault();
       const code = document.getElementById('code').value.trim().toUpperCase();
@@ -307,6 +346,50 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
       eventCode = code;
       history.replaceState(null, '', `${baseUrl()}?e=${encodeURIComponent(code)}`);
       renderEventTop();
+    };
+  }
+
+  // 受付カードの「受付番号＋4桁PIN」で入る
+  function renderPinLogin(errorMessage) {
+    app.innerHTML = `
+      <div class="center">
+        <p style="font-size:52px" aria-hidden="true">🎫</p>
+        <h1 class="display" style="font-size:24px">番号で入る</h1>
+        <p class="muted">受付カードに書いてある番号とPINを入れてください</p>
+        <form class="panel" id="pinForm" style="width:100%;padding:18px;display:flex;flex-direction:column;gap:10px;text-align:left">
+          <label for="pinCode" class="muted">イベントコード</label>
+          <input type="text" id="pinCode" autocomplete="off" autocapitalize="characters" value="${esc(eventCode || '')}" style="text-align:center;letter-spacing:.15em;font-family:var(--font-display);font-weight:400">
+          <label for="pinNo" class="muted">受付番号</label>
+          <input type="text" id="pinNo" inputmode="numeric" pattern="[0-9]*" autocomplete="off" style="text-align:center;font-family:var(--font-display);font-weight:400;font-size:22px">
+          <label for="pinPin" class="muted">PIN（4桁）</label>
+          <input type="text" id="pinPin" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" style="text-align:center;letter-spacing:.4em;font-family:var(--font-display);font-weight:400;font-size:22px">
+          <p class="error" id="pinError" ${errorMessage ? '' : 'hidden'}>${esc(errorMessage || '')}</p>
+          <button class="btn" id="pinSubmit">入る</button>
+        </form>
+        <button class="btn-ghost" id="pinBack" style="max-width:260px;font-size:14px">戻る</button>
+      </div>`;
+    document.getElementById('pinBack').onclick = () => renderCodeEntry();
+    document.getElementById('pinForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const button = document.getElementById('pinSubmit');
+      const errorBox = document.getElementById('pinError');
+      const code = document.getElementById('pinCode').value.trim();
+      const no = parseInt(document.getElementById('pinNo').value.replace(/[^0-9]/g, ''), 10);
+      const pin = document.getElementById('pinPin').value.replace(/[^0-9]/g, '');
+      if (!code || !no || pin.length !== 4) { errorBox.hidden = false; errorBox.textContent = 'イベントコード・番号・4桁のPINを入れてください'; return; }
+      button.disabled = true; button.textContent = '確認中…';
+      try {
+        const result = await rpc('mb_login_pin', { p_code: code, p_entry_no: no, p_pin: pin });
+        if (!result.ok) throw new Error(result.message);
+        storage.set(SESSION_KEY, result.sessionToken);
+        eventCode = result.eventCode;
+        history.replaceState(null, '', baseUrl());
+        applyState(await rpc('mb_state', { p_session: result.sessionToken }));
+        renderSummon();
+      } catch (error) {
+        errorBox.hidden = false; errorBox.textContent = error.message; errorBox.classList.add('shake');
+        button.disabled = false; button.textContent = '入る';
+      }
     };
   }
 
@@ -431,13 +514,26 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
         <h1 class="display" style="text-align:center;font-size:28px">やることは4つだけ</h1>
         ${FOUR_STEPS.map(([i, t, b], n) => `<div class="panel row" style="padding:14px;animation:pop .5s ${n * 0.12}s both"><span style="font-size:30px;width:48px;text-align:center">${i}</span><div class="grow"><p class="display" style="color:var(--pumpkin-soft);font-size:17px">${n + 1}. ${t}</p><p class="faint">${b}</p></div></div>`).join('')}
         <p class="faint" style="text-align:center">ビンゴしても終わりじゃない！全モンスター収集を目指そう。<br>同じ人との交換は1回だけです。</p>
+        ${state && safeUrl(state.event.guideImageUrl) ? '<button class="btn-ghost" data-act="guide">📄 配布ガイドを見る</button>' : ''}
         <button class="btn" id="start" style="font-size:24px;margin-top:auto">START</button>
       </div>`;
+    app.querySelectorAll('[data-act=guide]').forEach((b) => (b.onclick = showGuide));
     document.getElementById('start').onclick = () => { tab = 'bingo'; startGame(); };
   }
 
   // ================================================================ 状態の取得と演出
+  // サーバーはモンスターの中身を monsters に1回だけ入れ、マス・図鑑・履歴には id だけを載せて返す（応答を軽くするため）。
+  //   画面側のコードを変えずに済むよう、ここで id を中身に戻しておく
+  function hydrate(next) {
+    const dict = next.monsters || {};
+    const get = (id) => (id && dict[id] ? Object.assign({ id }, dict[id]) : null);
+    next.card.cells.forEach((c) => { c.monster = get(c.monsterId); c.isFree = Boolean(c.isFree); });
+    next.collection.forEach((e) => { e.monster = get(e.monsterId); });
+    next.recentAcquisitions = next.recentAcquisitions.filter((a) => (a.monster = get(a.monsterId)));
+    return next;
+  }
   function applyState(next) {
+    hydrate(next);
     const previous = state;
     if (!seenAcquisitions) {
       seenAcquisitions = new Set(next.recentAcquisitions.map((a) => a.id));
@@ -454,22 +550,89 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
     state = next;
   }
 
+  // 前回の version を渡し、変わっていなければ {unchanged:true} だけが返る（本文0に近い）。
+  //   変わっていない時は画面も作り直さない（描き直しの負荷と、スクロール位置が飛ぶのを避ける）
+  let pollDelay = POLL.base;
+  let offline = false;
   async function refresh() {
     try {
-      applyState(await rpc('mb_state', { p_session: storage.get(SESSION_KEY) }));
+      const next = await rpc('mb_state', { p_session: storage.get(SESSION_KEY), p_version: state ? state.version : null });
+      setOffline(false);
+      if (next.unchanged) {
+        pollDelay = Math.min(POLL.max, Math.round(pollDelay * 1.5));
+        if (tab === 'ranking' && Date.now() - rankingLoadedAt > 15000) loadRanking();
+        return;
+      }
+      pollDelay = POLL.base;
+      applyState(next);
       renderGame();
       playCelebrations();
+      flushQueue();
     } catch (error) {
       if (error.hint === 'NOT_JOINED') { storage.remove(SESSION_KEY); stopPolling(); state = null; renderCodeEntry('参加情報が見つかりません。もう一度参加してください'); }
+      else if (error.hint === 'ABSENT') renderAbsent();
+      else if (error.offline) setOffline(true);
     }
   }
-  const stopPolling = () => { clearInterval(pollTimer); pollTimer = null; };
+  const stopPolling = () => { clearTimeout(pollTimer); pollTimer = null; polling = false; };
+  let polling = false;
+  const nextDelay = () => (tab === 'scan' && scanTab === 'show' ? POLL.show : pollDelay);
+  function schedule() {
+    clearTimeout(pollTimer);
+    if (!polling) return;
+    pollTimer = setTimeout(async () => {
+      if (document.visibilityState === 'visible' && !scannerActive()) await refresh();
+      schedule();
+    }, nextDelay());
+  }
   function startGame() {
     renderGame();
     stopPolling();
-    pollTimer = setInterval(() => { if (document.visibilityState === 'visible' && !scannerActive()) refresh(); }, POLL_MS);
+    polling = true;
+    pollDelay = POLL.base;
+    schedule();
+    flushQueue();
   }
-  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && pollTimer) refresh(); });
+  // 画面に戻ってきた・タブを切り替えた時はすぐ取り直す（間隔が広がっていても待たせない）
+  const refreshNow = async () => { if (!polling) return; pollDelay = POLL.base; await refresh(); schedule(); };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshNow(); });
+  window.addEventListener('online', () => { setOffline(false); refreshNow(); flushQueue(); });
+
+  function setOffline(value) {
+    if (offline === value) return;
+    offline = value;
+    const bar = document.getElementById('offlineBar');
+    if (bar) bar.hidden = !offline;
+  }
+
+  // ---- 電波が無い間に読んだQRは端末に貯めて、戻ったら順番に送る
+  //   送る間隔は少しあける（サーバー側の連続スキャン制限にかからないように）
+  const readQueue = () => { try { return JSON.parse(storage.get(QUEUE_KEY) || '[]'); } catch (e) { return []; } };
+  const writeQueue = (q) => storage.set(QUEUE_KEY, JSON.stringify(q.slice(-30)));
+  function enqueueScan(text) {
+    const q = readQueue();
+    if (!q.some((x) => x.text === text)) q.push({ text, at: Date.now() });
+    writeQueue(q);
+  }
+  let flushing = false;
+  async function flushQueue() {
+    if (flushing || !storage.get(SESSION_KEY)) return;
+    let q = readQueue();
+    if (!q.length) return;
+    flushing = true;
+    try {
+      while (q.length) {
+        const item = q[0];
+        let result;
+        try { result = await rpc('mb_exchange', { p_session: storage.get(SESSION_KEY), p_scanned: item.text }); } catch (error) { if (error.offline) break; result = { ok: false }; }
+        if (result.code === 'TOO_FAST') { await new Promise((r) => setTimeout(r, 3500)); continue; }
+        q = readQueue().filter((x) => x.text !== item.text);
+        writeQueue(q);
+        await new Promise((r) => setTimeout(r, 3500));
+      }
+    } finally { flushing = false; }
+    if (polling) { pollDelay = POLL.base; refresh(); }
+  }
 
   function playCelebrations() {
     if (celebrating || !celebrationQueue.length) return;
@@ -518,6 +681,9 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
       </div>
       ${state.event.status === 'draft' ? '<p class="banner">まもなく開始！ 開始の合図があるまで交換はできません</p>' : ''}
       ${state.event.status === 'ended' ? '<p class="banner ended">イベントは終了しました。ありがとうございました！</p>' : ''}
+      ${state.event.status === 'active' && state.event.exchangePaused ? '<p class="banner paused">⏸ いまは交換をお休みしています。再開のアナウンスを待ってね</p>' : ''}
+      <p class="banner offline" id="offlineBar" ${offline ? '' : 'hidden'}>📡 電波が届いていません。読んだQRは、電波が戻ったら自動で送ります${readQueue().length ? `（${readQueue().length}件待ち）` : ''}</p>
+      ${noticeHtml()}
       </header>
       <main class="screen" id="main">${VIEWS[tab] ? VIEWS[tab](s) : VIEWS.bingo(s)}</main>
       <nav class="nav" aria-label="メニュー"><ul>
@@ -527,7 +693,26 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
       </ul></nav>`;
     updateHeader();
     app.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => switchTab(b.dataset.tab)));
+    const closeNotice = document.getElementById('closeNotice');
+    if (closeNotice) closeNotice.onclick = () => { storage.set(NOTICE_KEY, closeNotice.dataset.id); renderGame(); };
     bindView();
+  }
+  // 一番新しいお知らせを、閉じるまで上に出す。新しいものが来たら震わせて気づかせる（顔を上げるきっかけ）
+  let lastNoticeId = null;
+  function noticeHtml() {
+    const latest = (state.announcements || [])[0];
+    if (!latest) return '';
+    if (lastNoticeId !== null && latest.id > lastNoticeId && navigator.vibrate) navigator.vibrate([80, 60, 80]);
+    lastNoticeId = latest.id;
+    if (String(latest.id) === storage.get(NOTICE_KEY)) return '';
+    return `<div class="notice" role="status"><span>📣</span><span style="flex:1">${esc(latest.message)}</span><button id="closeNotice" data-id="${latest.id}" aria-label="お知らせを閉じる">✕</button></div>`;
+  }
+  function showGuide() {
+    const url = safeUrl(state && state.event.guideImageUrl);
+    if (!url) return;
+    const el = overlay(`<div style="width:100%;max-width:560px;max-height:100%;overflow:auto"><img class="guide-img" src="${esc(url)}" alt="配布ガイド"></div>
+      <p class="faint" style="margin-top:10px">ピンチで拡大できます</p><button class="btn-ghost" id="closeGuide" style="max-width:260px;margin-top:10px">閉じる</button>`);
+    el.querySelector('#closeGuide').onclick = () => el.remove();
   }
   function updateHeader() {
     const el = document.getElementById('headerPills');
@@ -539,6 +724,7 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
     history.replaceState(null, '', `${baseUrl()}#${next}`);
     renderGame();
     window.scrollTo(0, 0);
+    schedule(); // 「自分のQRを見せる」に入った・出た時に、問い合わせ間隔を切り替える
   }
 
   const LINES = (() => { const l = []; for (let i = 0; i < 5; i++) l.push([0, 1, 2, 3, 4].map((c) => i * 5 + c), [0, 1, 2, 3, 4].map((r) => r * 5 + i)); l.push([0, 6, 12, 18, 24], [4, 8, 12, 16, 20]); return l; })();
@@ -620,12 +806,14 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
           <h1 class="display" style="position:relative;font-size:36px">${esc(my && my.name)}</h1>
           <div style="position:relative;margin-top:6px">${badge(my)}</div>
           <p style="position:relative;margin-top:12px;font-weight:800;font-size:13px;line-height:1.7">このモンスターを探している人がいるかも。<br>いろんな人と話してみよう！</p>
-          <p class="faint" style="position:relative;margin-top:8px">${esc(state.me.nickname)} さん</p>
+          <p class="faint" style="position:relative;margin-top:8px">${esc(state.me.nickname)} さん${state.me.entryNo ? ` ・ No.${state.me.entryNo}` : ''}</p>
         </section>
         <div class="stats">${tiles.map(([l, v, u]) => `<div class="panel stat"><p class="faint">${l}</p><p class="v">${v}<small>${u}</small></p></div>`).join('')}</div>
         <button class="btn-ghost" data-tab-go="scan">🔳 自分のQRを表示</button>
         <button class="btn" data-act="share">📸 ストーリー用画像を作る</button>
-        <p class="faint" style="text-align:center">シェア画像には名前や交換相手は載りません</p>`;
+        <p class="faint" style="text-align:center">シェア画像には名前や交換相手は載りません</p>
+        ${safeUrl(state.event.guideImageUrl) ? '<button class="btn-ghost" data-act="guide">📄 配布ガイドを見る</button>' : ''}
+        ${(state.announcements || []).length ? `<p class="faint" style="letter-spacing:.2em;margin-top:6px">お知らせ</p>${state.announcements.map((a) => `<div class="panel" style="padding:10px 14px;font-size:13px;font-weight:800"><span class="faint">${new Date(a.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span>　${esc(a.message)}</div>`).join('')}` : ''}`;
     },
 
     ranking() {
@@ -655,8 +843,9 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
 
   function bindView() {
     app.querySelectorAll('[data-tab-go]').forEach((b) => (b.onclick = () => { if (b.dataset.tabGo === 'scan' && tab === 'me') scanTab = 'show'; switchTab(b.dataset.tabGo); }));
-    app.querySelectorAll('[data-scantab]').forEach((b) => (b.onclick = () => { stopScanner(); scanTab = b.dataset.scantab; renderGame(); }));
+    app.querySelectorAll('[data-scantab]').forEach((b) => (b.onclick = () => { stopScanner(); scanTab = b.dataset.scantab; renderGame(); schedule(); }));
     app.querySelectorAll('[data-act=share]').forEach((b) => (b.onclick = shareImage));
+    app.querySelectorAll('[data-act=guide]').forEach((b) => (b.onclick = showGuide));
     const qrBox = document.getElementById('myQr');
     if (qrBox && window.qrcode) {
       const qr = window.qrcode(0, 'M');
@@ -740,7 +929,13 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
     try {
       result = await rpc('mb_exchange', { p_session: storage.get(SESSION_KEY), p_scanned: text });
     } catch (error) {
-      result = { ok: false, message: error.message };
+      if (error.offline) {
+        enqueueScan(text);
+        setOffline(true);
+        result = { ok: false, message: '📡 電波が届いていません。このQRは覚えておいて、電波が戻ったら自動で送ります' };
+      } else {
+        result = { ok: false, message: error.message };
+      }
     }
     if (result.ok) {
       stopScanner();
@@ -764,7 +959,10 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
       return;
     }
     let result;
-    try { result = await rpc('mb_exchange', { p_session: session, p_scanned: token }); } catch (error) { result = { ok: false, message: error.message }; }
+    try { result = await rpc('mb_exchange', { p_session: session, p_scanned: token }); } catch (error) {
+      if (error.offline) enqueueScan(token);
+      result = { ok: false, message: error.offline ? '📡 電波が届いていません。電波が戻ったら自動で送ります' : error.message };
+    }
     try { applyState(await rpc('mb_state', { p_session: session })); } catch (e) {}
     if (!result.ok) {
       app.innerHTML = `<div class="center"><p style="font-size:56px">👻</p><p class="display" style="font-size:20px">${esc(result.message)}</p><button class="btn" id="back" style="max-width:300px">カードに戻る</button></div>`;
@@ -827,6 +1025,11 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
     el.querySelector('#closeShare').onclick = () => { el.remove(); URL.revokeObjectURL(url); };
   }
 
+  // アプリの外枠（HTML・画像・ライブラリ）だけを端末に保存し、電波が切れても画面が開くようにする。
+  //   Supabase への問い合わせは sw.js 側で素通しにしている（役割や状態を端末に残さないため）
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
   boot();
 })();
 </script>

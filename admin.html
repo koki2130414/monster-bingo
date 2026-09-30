@@ -36,7 +36,7 @@ h1, h2, p { margin: 0; }
 .grow { flex: 1; min-width: 0; }
 .grid { display: grid; gap: 14px; }
 .grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
-input[type=text], input[type=email], input[type=password], input[type=url], select {
+input[type=text], input[type=email], input[type=password], input[type=url], input[type=search], select {
   border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(11,10,16,.6); padding: 9px 12px; min-width: 0; }
 .btn { border: 0; border-radius: 12px; padding: 10px 16px; font-weight: 800; background: var(--pumpkin); color: var(--night); }
 .btn:disabled { opacity: .4; }
@@ -73,11 +73,53 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--night-4); border: 1px solid var(--line); border-radius: 12px; padding: 10px 18px; font-weight: 800; z-index: 20; max-width: calc(100% - 32px); }
 .error { color: var(--bad); font-weight: 800; }
 .modal { position: fixed; inset: 0; background: rgba(11,10,16,.85); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 30; }
-.modal .panel { max-width: 440px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
+.modal .panel { max-width: 440px; width: 100%; display: flex; flex-direction: column; gap: 12px; max-height: calc(100dvh - 32px); overflow-y: auto; }
+.modal label.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); font-weight: 800; }
+textarea { font: inherit; color: inherit; border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(11,10,16,.6); padding: 9px 12px; width: 100%; resize: vertical; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips button { border: 1px solid rgba(255,255,255,.16); background: none; border-radius: 999px; padding: 5px 12px; font-weight: 800; font-size: 12px; color: var(--muted); }
+.chips button[aria-pressed=true] { background: var(--pumpkin); border-color: var(--pumpkin); color: var(--night); }
+tr.absent td { opacity: .45; }
+.tag { display: inline-block; border-radius: 6px; padding: 1px 6px; font-size: 11px; font-weight: 800; }
+.tag.in { background: rgba(110,231,161,.18); color: var(--good); }
+.tag.wait { background: rgba(255,255,255,.08); color: var(--muted); }
+.tag.absent { background: rgba(255,154,154,.18); color: var(--bad); }
+.banner-pause { background: rgba(252,211,77,.14); border: 1px solid rgba(252,211,77,.4); color: var(--warn); border-radius: 12px; padding: 10px 14px; font-weight: 800; }
+details.panel summary { cursor: pointer; font-weight: 800; }
+.announce-item { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); }
+
+/* ---- 受付カードの印刷（91×55mm を A4 に 2列×5段）。紙は白黒前提なので、画面の配色は使わない */
+#printSheet { display: none; }
+.print-preview { position: fixed; inset: 0; z-index: 40; background: rgba(11,10,16,.92); overflow-y: auto; overflow-x: hidden; padding: 16px; }
+.print-preview .bar { position: sticky; top: 0; z-index: 2; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: var(--night-3); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin: 0 auto 16px; max-width: 820px; }
+.print-preview .sheet-page { background: #fff; margin: 0 auto 16px; box-shadow: 0 10px 40px rgba(0,0,0,.6); }
+.sheet-page { width: 210mm; height: 297mm; position: relative; overflow: hidden; color: #000; font-family: "Hiragino Sans", "M PLUS Rounded 1c", sans-serif; }
+.card91 { position: absolute; width: 91mm; height: 55mm; box-sizing: border-box; border: 0.2mm dashed #999; padding: 4mm; display: flex; gap: 3.5mm; align-items: center; }
+.card91 .qrp { width: 36mm; height: 36mm; flex-shrink: 0; }
+.card91 .qrp svg { width: 100%; height: 100%; display: block; }
+.card91 .qrp svg rect[fill="white"], .card91 .qrp svg path { shape-rendering: crispEdges; }
+.card91 .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.8mm; }
+.card91 .brand { font-family: "Dela Gothic One", sans-serif; font-size: 7.5pt; letter-spacing: .04em; }
+.card91 .ev { font-size: 6pt; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card91 .nick { font-size: 13pt; font-weight: 800; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.card91 .aff { font-size: 6.5pt; color: #444; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-height: 1em; }
+.card91 .creds { display: flex; gap: 2.5mm; margin-top: 1mm; }
+.card91 .creds div { border: 0.3mm solid #000; border-radius: 1.5mm; padding: 0.6mm 1.8mm; }
+.card91 .creds small { display: block; font-size: 5pt; color: #444; }
+.card91 .creds b { font-family: "Dela Gothic One", monospace; font-size: 11pt; letter-spacing: .08em; }
+.card91 .how { font-size: 5.4pt; line-height: 1.45; color: #222; margin-top: 1mm; }
+@media print {
+  @page { size: A4 portrait; margin: 0; }
+  body { background: #fff !important; }
+  body > *:not(#printSheet) { display: none !important; }
+  #printSheet { display: block !important; }
+  #printSheet .sheet-page { page-break-after: always; break-after: page; }
+}
 </style>
 </head>
 <body>
 <div class="wrap" id="app"></div>
+<div id="printSheet" aria-hidden="true"></div>
 <script>
 (function () {
   'use strict';
@@ -90,7 +132,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   const ROLE = { guest: '参加者', staff: 'スタッフ', organizer: '主催者', sponsor: 'スポンサー', vip: 'ゲスト' };
   const RARITY = { normal: '通常', rare: 'RARE', secret: 'SECRET' };
   const STATUS = { draft: '準備中', active: '開催中', ended: '終了' };
-  const FRAUD = { SELF_SCAN: '自分のQRを読み込もうとした', INVALID_TOKEN: '無効なQRを読み込んだ', RAPID_SCANS: '1分間に大量の交換', QR_SHARED_SUSPECT: '短時間に多数から読まれた（QRスクショ共有の疑い）' };
+  const FRAUD = { SELF_SCAN: '自分のQRを読み込もうとした', INVALID_TOKEN: '無効なQRを読み込んだ', RAPID_SCANS: '1分間に大量の交換', QR_SHARED_SUSPECT: '短時間に多数から読まれた（QRスクショ共有の疑い）', PIN_LOCKED: '番号＋PINの入力ミスが続いてロック' };
   const time = (t) => new Date(t).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
 
   async function rpc(fn, args) {
@@ -121,10 +163,27 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   async function run(action, success) {
     try { const result = await action(); if (success) toast(success); return result; } catch (error) { if (error.hint !== 'ADMIN_REQUIRED') toast('⚠️ ' + error.message); return null; }
   }
-  function qrSvg(text) {
-    const qr = window.qrcode(0, 'M'); qr.addData(text); qr.make();
-    return qr.createSvgTag({ cellSize: 6, margin: 1, scalable: true });
+  // 誤り訂正は M。Q/H にすると同じ大きさでも升目が細かくなり、薄いコピーやピンぼけで読めなくなりやすい
+  //   （tests/print-check.mjs で300dpiに刷り直した画像を読んで確かめている）
+  function qrSvg(text, level) {
+    const qr = window.qrcode(0, level || 'M'); qr.addData(text); qr.make();
+    return qr.createSvgTag({ cellSize: 6, margin: level ? 2 : 1, scalable: true });
   }
+  // 画面の上に重ねる小窓。開いている間は自動更新で中身を作り直さない（入力中の文字が消えないように）
+  function modal(html) {
+    const el = document.createElement('div');
+    el.className = 'modal'; el.setAttribute('role', 'dialog');
+    el.innerHTML = `<div class="panel">${html}</div>`;
+    el.addEventListener('click', (e) => { if (e.target === el) el.remove(); });
+    document.body.appendChild(el);
+    return el;
+  }
+  // 入力中・小窓表示中は自動更新で画面を作り直さない
+  const userIsBusy = () => {
+    if (document.querySelector('.modal, .print-preview')) return true;
+    const a = document.activeElement;
+    return Boolean(a && a !== document.body && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && document.getElementById('app').contains(a));
+  };
 
   // ---------------------------------------------------------------- ログイン
   function renderLogin(message) {
@@ -190,9 +249,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     renderEvent();
     stopPolling();
     pollTimer = setInterval(async () => {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== 'visible' || userIsBusy()) return;
       try {
-        if (current.tab === 'dashboard') { await loadDashboard(); await renderTab(); }
+        // 取りに行っている間に入力を始めることがあるので、描き直す直前にもう一度確かめる
+        if (current.tab === 'dashboard') { await loadDashboard(); if (!userIsBusy()) await renderTab(); }
         if (current.tab === 'encounters' || current.tab === 'fraud') await renderTab();
       } catch (e) { /* 通信が不安定でも次の更新で取り直す */ }
     }, 5000);
@@ -208,14 +268,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
       <div class="row">
         <h1 class="display grow" style="font-size:22px">${esc(e.name)} <span style="font-family:monospace;font-size:14px;color:var(--pumpkin-soft)">${esc(e.code)}</span></h1>
         <span class="status ${e.status}">${STATUS[e.status]}</span>
+        ${e.status === 'active' ? `<button class="btn-ghost" id="pause">${e.exchange_paused ? '▶ 交換を再開' : '⏸ 交換を一時停止'}</button>` : ''}
         ${e.status !== 'active' ? '<button class="btn" id="start">▶ イベント開始</button>' : '<button class="btn-ghost" id="end">■ 終了</button>'}
       </div>
+      ${e.status === 'active' && e.exchange_paused ? '<p class="banner-pause">⏸ 交換を一時停止中です。参加者の画面にも「お休み中」と出ています（イベントの状態は開催中のまま）</p>' : ''}
       <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${current.tab === k}">${l}${k === 'fraud' && current.dashboard.totals.fraudLogs ? `<span class="count">${current.dashboard.totals.fraudLogs}</span>` : ''}</button>`).join('')}</div>
       <section id="tab"></section>`;
     document.getElementById('back').onclick = renderEventList;
     const setStatus = async (status) => { await run(() => admin('mb_admin_update_event', { p_event_id: current.eventId, p_patch: { status } }), '状態を変更しました'); await loadDashboard(); renderEvent(); };
     const startButton = document.getElementById('start');
     if (startButton) startButton.onclick = () => setStatus('active');
+    const pauseButton = document.getElementById('pause');
+    if (pauseButton) pauseButton.onclick = async () => {
+      await run(() => admin('mb_admin_update_event', { p_event_id: current.eventId, p_patch: { exchange_paused: !e.exchange_paused } }), e.exchange_paused ? '交換を再開しました' : '交換を一時停止しました');
+      await loadDashboard(); renderEvent();
+    };
     const endButton = document.getElementById('end');
     if (endButton) endButton.onclick = () => { if (confirm('イベントを終了しますか？（交換できなくなります）')) setStatus('ended'); };
     app.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { current.tab = b.dataset.tab; renderEvent(); }));
@@ -234,12 +301,22 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     const d = current.dashboard, t = d.totals;
     const joinUrl = `${participantAppUrl()}?e=${encodeURIComponent(ev().code)}`;
     const maxAssigned = Math.max(1, ...d.monsters.map((m) => m.assigned_count));
-    const people = (list, empty) => list.length ? list.map((p) => `<div><b>${esc(p.nickname)}</b><span class="faint">交流${p.encounterPeople}人 · 参加 ${time(p.joinedAt)}</span></div>`).join('') : `<p class="faint">${empty}</p>`;
+    const people = (list, empty) => list.length ? list.map((p) => `<div><b><span class="faint">No.${p.entryNo}</span> ${esc(p.nickname)}</b><span class="faint">交流${p.encounterPeople}人 · 入場 ${time(p.joinedAt)}</span></div>`).join('') : `<p class="faint">${empty}</p>`;
+    // 「参加中」は当日いる人（入場済み・欠席でない）。登録数とは分けて見せる
+    //   登録数を大きく出すと、参加者の画面や実際に交換できる人数と食い違って混乱する
     box.innerHTML = `
       <div class="grid">
-        <div class="tiles">${[['参加者', t.participants, '人'], ['総交流数', t.encounters, '回'], ['平均交流人数', t.averageEncounterPeople, '人'], ['BINGO達成', t.bingoAchievers, '人'], ['カード完成', t.cardCompleters, '人']]
+        <div class="tiles">
+          <div class="panel tile"><p class="faint">参加中（当日いる人）</p><p class="v">${t.participants}<small>人</small></p><p class="faint">登録 ${t.registered} ・ 未入場 ${t.waiting} ・ 欠席 ${t.absent}</p></div>
+          ${[['総交流数', t.encounters, '回'], ['平均交流人数', t.averageEncounterPeople, '人'], ['BINGO達成', t.bingoAchievers, '人'], ['カード完成', t.cardCompleters, '人']]
           .map(([l, v, u]) => `<div class="panel tile"><p class="faint">${l}</p><p class="v">${v}<small>${u}</small></p></div>`).join('')}</div>
-        <p class="faint" style="text-align:right">5秒ごとに自動更新</p>
+        <p class="faint" style="text-align:right">5秒ごとに自動更新（入力中は止まります）</p>
+        <form class="panel" id="announce" style="display:flex;flex-direction:column;gap:10px">
+          <h2 class="display" style="font-size:16px">📣 全体へのお知らせ</h2>
+          <p class="faint">参加者全員の画面の上に出ます（届くまで最大30秒ほど）。景品の受け取り場所、乾杯・集合の合図などに。</p>
+          <div class="row"><textarea id="announceText" rows="2" maxlength="200" placeholder="例：BINGOした人は受付で景品を受け取ってね" class="grow"></textarea><button class="btn">送信</button></div>
+          ${d.announcements.length ? `<div style="display:flex;flex-direction:column;gap:6px">${d.announcements.map((a) => `<div class="announce-item"><span class="faint" style="white-space:nowrap">${time(a.createdAt)}</span><span class="grow">${esc(a.message)}</span><button type="button" class="link" data-unannounce="${a.id}" style="color:var(--bad)">取り消す</button></div>`).join('')}</div>` : ''}
+        </form>
         <div class="grid grid-2">
           <div class="panel"><h2 class="display" style="font-size:16px;color:var(--bad)">まだ一度も交流していない人 <span class="muted">${d.notYetInteracted.length}人</span></h2><p class="faint" style="margin:4px 0 10px">運営だけに表示されます。スタッフから声をかけてあげてください。</p><div class="people">${people(d.notYetInteracted, '全員が交流しています 🎉')}</div></div>
           <div class="panel"><h2 class="display" style="font-size:16px;color:var(--warn)">交流が少ない人 <span class="muted">${d.fewInteractions.length}人</span></h2><p class="faint" style="margin:4px 0 10px">参加から10分以上たって、交流が2人以下の人</p><div class="people">${people(d.fewInteractions, '該当者なし')}</div></div>
@@ -256,6 +333,20 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         </div>
       </div>`;
     document.getElementById('csv').onclick = downloadCsv;
+    document.getElementById('announce').onsubmit = async (event) => {
+      event.preventDefault();
+      const text = document.getElementById('announceText');
+      if (!text.value.trim()) return;
+      if (!confirm(`参加者全員に送ります：\n\n${text.value.trim()}`)) return;
+      const sent = await run(() => admin('mb_admin_announce', { p_event_id: current.eventId, p_message: text.value }), 'お知らせを送りました');
+      if (sent) { text.value = ''; text.blur(); }
+      await loadDashboard(); renderTab();
+    };
+    box.querySelectorAll('[data-unannounce]').forEach((b) => (b.onclick = async () => {
+      if (!confirm('このお知らせを取り消しますか？（参加者の画面からも消えます）')) return;
+      await run(() => admin('mb_admin_delete_announcement', { p_event_id: current.eventId, p_announcement_id: Number(b.dataset.unannounce) }), '取り消しました');
+      await loadDashboard(); renderTab();
+    }));
     document.getElementById('reset').onclick = async () => {
       if (prompt('交換履歴・獲得・不正ログをすべて消します。よろしければ RESET と入力') !== 'RESET') return;
       const regenerate = confirm('カードも作り直しますか？（FREEマス設定やモンスター追加を反映したい時は OK）');
@@ -268,8 +359,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     const rows = await admin('mb_admin_participants', { p_event_id: current.eventId });
     const total = current.dashboard.speciesTotal || 1;
     const cell = (v) => { let s = v == null ? '' : String(v); if (/^[=+\-@]/.test(s)) s = "'" + s; return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-    const header = ['ニックネーム', '役割', '担当モンスター', 'レア度', '交流人数', '発見種類', 'コンプリート率(%)', 'BINGOライン', 'OPENマス', '初BINGO', 'カード完成', '参加日時'];
-    const lines = rows.map((r) => [r.nickname, ROLE[r.role], r.monster_name, r.monster_rarity, r.encounter_people, r.species_found, Math.round(r.species_found / total * 100), r.bingo_lines, r.opened_cells, r.first_bingo_at || '', r.completed_at || '', r.created_at].map(cell).join(','));
+    const header = ['No', 'ニックネーム', '所属', '役割', '入場', '欠席', '担当モンスター', 'レア度', '交流人数', '発見種類', 'コンプリート率(%)', 'BINGOライン', 'OPENマス', '初BINGO', 'カード完成', '登録日時'];
+    const lines = rows.map((r) => [r.entry_no, r.nickname, r.affiliation || '', ROLE[r.role], r.checked_in_at || '', r.absent_at ? '欠席' : '', r.monster_name, r.monster_rarity, r.encounter_people, r.species_found, Math.round(r.species_found / total * 100), r.bingo_lines, r.opened_cells, r.first_bingo_at || '', r.completed_at || '', r.created_at].map(cell).join(','));
     const blob = new Blob(['﻿' + [header.join(','), ...lines].join('\n')], { type: 'text/csv' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `monster-bingo-${ev().code}.csv`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
@@ -297,6 +388,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
           <h2 class="display" style="font-size:16px;margin-top:8px">不正防止・上限</h2>
           <label class="row">連続スキャンの間隔 <input type="text" inputmode="numeric" id="cooldown" value="${e.exchange_cooldown_seconds}" style="width:70px"> 秒</label>
           <label class="row">参加人数の上限 <input type="text" inputmode="numeric" id="maxp" value="${e.max_participants}" style="width:90px"> 人</label>
+          <h2 class="display" style="font-size:16px;margin-top:8px">紙のガイド画像</h2>
+          <input type="url" id="guide" value="${esc(e.guide_image_url || '')}" placeholder="https://…（配った紙のガイドと同じ画像）">
+          <p class="faint">参加者の「MY MONSTER」画面と遊び方に表示され、タップで拡大できます。PDFではなく画像（PNG/JPEG、150KB程度）にしてください。空欄で非表示。</p>
         </div>
         <button class="btn" style="grid-column:1/-1;padding:14px">設定を保存</button>
       </form>`;
@@ -313,6 +407,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
         ranking_metric: document.getElementById('ranking_metric').value,
         exchange_cooldown_seconds: Number(document.getElementById('cooldown').value) || 0,
         max_participants: Number(document.getElementById('maxp').value) || 500,
+        guide_image_url: document.getElementById('guide').value,
       } }), '設定を保存しました');
       await loadDashboard(); renderEvent();
     };
@@ -367,63 +462,256 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   }
 
   // ---- 参加者
-  async function tabParticipants(box, claim) {
+  // 一覧は最初30人だけ描き「さらに表示」で足す。
+  //   全員分を1度に描くと、行ごとのセレクトボックスまで含めて数千要素になり、操作のたびに画面が固まる
+  //   （別アプリの本番で128行・約7,900要素、クリックごとに約1秒固まった）。編集は行ではなく小窓で行う。
+  const PAGE = 30;
+  const list = { rows: [], q: '', filter: 'all', limit: PAGE };
+  const FILTERS = [
+    ['all', '全員', () => true],
+    ['in', '入場済み', (r) => r.checked_in_at && !r.absent_at],
+    ['wait', '未入場', (r) => !r.checked_in_at && !r.absent_at],
+    ['absent', '欠席', (r) => r.absent_at],
+    ['lonely', '交流0', (r) => r.checked_in_at && !r.absent_at && r.encounter_people === 0],
+  ];
+  const matches = (r) => {
+    const q = list.q.trim().toLowerCase();
+    if (!q) return true;
+    if (/^\d+$/.test(q)) return String(r.entry_no) === q; // 数字だけなら受付番号で引く（受付で「12番です」と言われた時）
+    return r.nickname.toLowerCase().includes(q) || (r.affiliation || '').toLowerCase().includes(q) || (r.full_name || '').toLowerCase().includes(q);
+  };
+  const visibleRows = () => list.rows.filter(FILTERS.find((f) => f[0] === list.filter)[2]).filter(matches);
+  const monsterOptions = (selected) => current.dashboard.monsters.map((m) => `<option value="${m.id}" ${m.id === selected ? 'selected' : ''}>${esc(m.emoji)} ${esc(m.name)}${m.rarity !== 'normal' ? `【${RARITY[m.rarity]}】` : ''}${m.is_active ? '' : '（無効）'}</option>`).join('');
+  const roleOptions = (selected) => Object.entries(ROLE).map(([v, l]) => `<option value="${v}" ${v === selected ? 'selected' : ''}>${l}</option>`).join('');
+  const entryTag = (r) => (r.absent_at ? '<span class="tag absent">欠席</span>' : r.checked_in_at ? `<span class="tag in">${time(r.checked_in_at)}</span>` : '<span class="tag wait">未入場</span>');
+  async function reloadParticipants() { list.rows = await admin('mb_admin_participants', { p_event_id: current.eventId }); }
+
+  async function tabParticipants(box) {
     box.innerHTML = '<p class="muted">読み込み中…</p>';
-    const rows = await admin('mb_admin_participants', { p_event_id: current.eventId });
-    const monsters = current.dashboard.monsters;
-    const monsterOptions = (selected) => monsters.map((m) => `<option value="${m.id}" ${m.id === selected ? 'selected' : ''}>${esc(m.emoji)} ${esc(m.name)}${m.rarity !== 'normal' ? `【${RARITY[m.rarity]}】` : ''}${m.is_active ? '' : '（無効）'}</option>`).join('');
-    const roleOptions = (selected) => Object.entries(ROLE).map(([v, l]) => `<option value="${v}" ${v === selected ? 'selected' : ''}>${l}</option>`).join('');
+    await reloadParticipants();
     box.innerHTML = `
       <div class="grid">
         <form class="panel row" id="addParticipant">
-          <b style="width:100%">参加者を追加（スタッフ・主催者・スポンサー・ゲストなど）</b>
-          <input type="text" id="pNick" placeholder="ニックネーム" class="grow" required>
+          <b style="width:100%">1人ずつ追加（スタッフ・主催者・スポンサー・名簿にない当日参加者など）</b>
+          <input type="text" id="pNick" placeholder="ニックネーム" class="grow" maxlength="20" required>
+          <input type="text" id="pAff" placeholder="所属（任意）" style="width:160px" maxlength="40">
           <select id="pRole">${roleOptions('staff')}</select>
           <select id="pMonster"><option value="">モンスター：自動（均等配布）</option>${monsterOptions(null)}</select>
           <button class="btn">＋ 追加</button>
         </form>
-        ${claim ? `<div class="panel row" style="border-color:rgba(255,122,26,.5)"><div class="qr" style="width:150px">${qrSvg(claim.url)}</div>
-          <div class="grow"><b>${esc(claim.nickname)} さんのスマホでこのQRを読むとログインできます</b><p class="faint" style="word-break:break-all;margin-top:6px">${esc(claim.url)}</p><p class="error" style="font-size:12px;margin-top:6px">このリンクは本人専用のログイン情報です。本人以外に共有しないでください。</p></div></div>` : ''}
-        <div class="row"><input type="text" id="search" placeholder="ニックネームで検索" class="grow"><span class="faint">${rows.length}人</span></div>
+        <details class="panel" id="importBox">
+          <summary>📋 名簿を貼り付けて一括登録・一括更新</summary>
+          <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
+            <p class="faint">表計算ソフトからそのまま貼り付けできます（タブ区切り・カンマ区切り）。1行に1人。<br>
+              <b>ニックネーム, 所属, 役割</b> … 新しく登録（まだ来ていない扱い）<br>
+              <b>No, ニックネーム, 所属, 役割</b> … 先頭が数字なら、その受付番号の人を更新（名前の聞き間違い・所属の差し替え）<br>
+              役割は 参加者／スタッフ／主催者／スポンサー／ゲスト（空欄なら参加者、更新時は変更なし）。1行目が見出しなら自動で飛ばします。</p>
+            <textarea id="importText" rows="6" placeholder="山田太郎\tA社\n鈴木花子\tB社\tスタッフ\n12\t佐藤\tC社"></textarea>
+            <div class="row"><button type="button" class="btn-ghost" id="importPreview">確認する</button><span class="faint grow" id="importSummary"></span><button type="button" class="btn" id="importRun" disabled>取り込む</button></div>
+          </div>
+        </details>
+        <div class="panel" style="display:flex;flex-direction:column;gap:10px">
+          <div class="row"><input type="search" id="search" placeholder="No・ニックネーム・所属で検索" class="grow" value="${esc(list.q)}" autocomplete="off"></div>
+          <div class="row"><div class="chips grow" id="filters"></div><button type="button" class="btn-ghost" id="printCards">🖨 受付カードを印刷</button></div>
+        </div>
         <div class="table-wrap"><table>
-          <thead><tr><th>ニックネーム</th><th>役割</th><th>担当モンスター</th><th class="num">交流</th><th class="num">発見</th><th class="num">LINE</th><th></th></tr></thead>
-          <tbody>${rows.map((r) => `<tr data-row="${r.id}" data-nick="${esc(r.nickname.toLowerCase())}">
-            <td><b>${esc(r.nickname)}</b></td>
-            <td><select data-field="role">${roleOptions(r.role)}</select></td>
-            <td><select data-field="monster_id">${monsterOptions(r.monster_id)}</select></td>
-            <td class="num">${r.encounter_people}</td><td class="num">${r.species_found}/${current.dashboard.speciesTotal}</td><td class="num">${r.bingo_lines}</td>
-            <td style="white-space:nowrap;text-align:right"><button class="link" data-rotate style="color:var(--witch)">QR再発行</button>　<button class="link" data-remove style="color:var(--bad)">削除</button></td>
-          </tr>`).join('')}</tbody>
+          <thead><tr><th class="num">No</th><th>ニックネーム</th><th>役割</th><th>担当</th><th>入場</th><th class="num">交流</th><th class="num">発見</th><th class="num">LINE</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
         </table></div>
+        <div id="more" style="text-align:center"></div>
       </div>`;
+    renderRows();
+
+    const search = document.getElementById('search');
+    let searchTimer;
+    search.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { list.q = search.value; list.limit = PAGE; renderRows(); }, 150); };
+
     document.getElementById('addParticipant').onsubmit = async (e) => {
       e.preventDefault();
       const nickname = document.getElementById('pNick').value;
-      const created = await run(() => admin('mb_admin_add_participant', { p_event_id: current.eventId, p_nickname: nickname, p_role: document.getElementById('pRole').value, p_monster_id: document.getElementById('pMonster').value || null }), '参加者を追加しました');
+      const created = await run(() => admin('mb_admin_add_participant', { p_event_id: current.eventId, p_nickname: nickname, p_role: document.getElementById('pRole').value, p_monster_id: document.getElementById('pMonster').value || null, p_affiliation: document.getElementById('pAff').value || null }), '参加者を追加しました');
       if (!created) return;
-      await loadDashboard();
-      tabParticipants(box, { nickname, url: `${participantAppUrl()}?s=${encodeURIComponent(created.sessionToken)}` });
+      document.getElementById('pNick').value = ''; document.getElementById('pAff').value = '';
+      await loadDashboard(); await reloadParticipants(); renderRows();
+      const cards = await run(() => admin('mb_admin_issue_logins', { p_event_id: current.eventId, p_participant_ids: [created.participantId] }));
+      if (cards) showCards(cards);
     };
-    document.getElementById('search').oninput = (e) => {
-      const q = e.target.value.toLowerCase();
-      box.querySelectorAll('[data-row]').forEach((tr) => { tr.hidden = !tr.dataset.nick.includes(q); });
+
+    let parsed = [];
+    const ROLE_BY_LABEL = Object.fromEntries(Object.entries(ROLE).flatMap(([v, l]) => [[l, v], [v, v]]));
+    document.getElementById('importPreview').onclick = () => {
+      parsed = []; const problems = [];
+      document.getElementById('importText').value.split(/\r?\n/).forEach((line, i) => {
+        if (!line.trim()) return;
+        const cols = line.split(line.includes('\t') ? '\t' : ',').map((c) => c.trim());
+        if (i === 0 && /^(no|番号|ニックネーム|名前|氏名)$/i.test(cols[0])) return; // 見出し行
+        const hasNo = /^\d+$/.test(cols[0]);
+        const [no, nickname, affiliation, roleLabel] = hasNo ? cols : [null, ...cols];
+        const role = roleLabel ? ROLE_BY_LABEL[roleLabel] : null;
+        if (roleLabel && !role) { problems.push(`${i + 1}行目：役割「${roleLabel}」が読めません`); return; }
+        const row = { nickname: nickname || '' };
+        if (hasNo) row.no = Number(no);
+        if (affiliation !== undefined) row.affiliation = affiliation;
+        if (role) row.role = role;
+        parsed.push(row);
+      });
+      const adds = parsed.filter((r) => r.no == null).length;
+      document.getElementById('importSummary').textContent = `新規 ${adds}人 ・ 更新 ${parsed.length - adds}人${problems.length ? ` ／ ⚠️ ${problems.join('、')}` : ''}`;
+      document.getElementById('importRun').disabled = !parsed.length;
     };
-    box.querySelectorAll('[data-row]').forEach((tr) => {
-      const id = tr.dataset.row;
-      tr.querySelectorAll('select[data-field]').forEach((s) => (s.onchange = async () => {
-        await run(() => admin('mb_admin_update_participant', { p_event_id: current.eventId, p_participant_id: id, p_patch: { [s.dataset.field]: s.value } }), '変更しました');
-        await loadDashboard();
-      }));
-      tr.querySelector('[data-rotate]').onclick = async () => {
-        if (!confirm('この人のQRを作り直しますか？（古いQR・スクショは使えなくなります）')) return;
-        await run(() => admin('mb_admin_rotate_qr', { p_event_id: current.eventId, p_participant_id: id }), 'QRを再発行しました');
-      };
-      tr.querySelector('[data-remove]').onclick = async () => {
-        if (!confirm('この参加者を削除しますか？')) return;
+    document.getElementById('importRun').onclick = async () => {
+      const result = await run(() => admin('mb_admin_import', { p_event_id: current.eventId, p_rows: parsed }));
+      if (!result) return;
+      toast(`新規 ${result.added}人 ・ 更新 ${result.updated}人${result.errors.length ? ` ・ 取り込めなかった行 ${result.errors.length}` : ''}`);
+      document.getElementById('importSummary').textContent = result.errors.map((x) => `${x.line}行目：${x.message}`).join(' ／ ');
+      if (!result.errors.length) { document.getElementById('importText').value = ''; document.getElementById('importRun').disabled = true; }
+      await loadDashboard(); await reloadParticipants(); renderRows();
+    };
+
+    document.getElementById('printCards').onclick = async () => {
+      const targets = visibleRows().filter((r) => !r.absent_at);
+      if (!targets.length) return toast('印刷する人がいません（絞り込みを確認してください）');
+      const alreadyIn = targets.filter((r) => r.checked_in_at).length;
+      const message = `表示中の ${targets.length}人分の受付カードを発行して印刷します。` +
+        (alreadyIn ? `\n\n⚠️ うち ${alreadyIn}人はすでに入場済みです。発行し直すと、その人のスマホはログアウトされ、新しいカードで入り直しになります。\n（未入場の人だけにするなら「未入場」で絞り込んでください）` : '\n\n以前に印刷したこの人たちのカードは使えなくなります。');
+      if (!confirm(message)) return;
+      const cards = await run(() => admin('mb_admin_issue_logins', { p_event_id: current.eventId, p_participant_ids: targets.map((r) => r.id) }));
+      if (cards) showCards(cards);
+    };
+  }
+
+  function renderRows() {
+    const filters = document.getElementById('filters');
+    if (!filters) return;
+    filters.innerHTML = FILTERS.map(([k, l, fn]) => `<button type="button" data-filter="${k}" aria-pressed="${list.filter === k}">${l} ${list.rows.filter(fn).length}</button>`).join('');
+    filters.querySelectorAll('[data-filter]').forEach((b) => (b.onclick = () => { list.filter = b.dataset.filter; list.limit = PAGE; renderRows(); }));
+    const rows = visibleRows();
+    const monsterById = Object.fromEntries(current.dashboard.monsters.map((m) => [m.id, m]));
+    document.getElementById('rows').innerHTML = rows.slice(0, list.limit).map((r) => {
+      const m = monsterById[r.monster_id];
+      return `<tr class="${r.absent_at ? 'absent' : ''}">
+        <td class="num faint">${r.entry_no}</td>
+        <td><b>${esc(r.nickname)}</b>${r.affiliation ? `<br><span class="faint">${esc(r.affiliation)}</span>` : ''}</td>
+        <td class="faint">${ROLE[r.role]}</td>
+        <td title="${esc(m ? m.name : '')}">${m ? esc(m.emoji) : '―'}${m && m.rarity !== 'normal' ? `<small style="color:var(--witch)"> ${RARITY[m.rarity]}</small>` : ''}</td>
+        <td>${entryTag(r)}</td>
+        <td class="num">${r.encounter_people}</td><td class="num">${r.species_found}</td><td class="num">${r.bingo_lines}</td>
+        <td style="text-align:right"><button class="link" data-edit="${r.id}">編集</button></td>
+      </tr>`;
+    }).join('') || `<tr><td colspan="9" class="faint" style="text-align:center;padding:20px">該当する人はいません</td></tr>`;
+    document.getElementById('rows').querySelectorAll('[data-edit]').forEach((b) => (b.onclick = () => editParticipant(b.dataset.edit)));
+    const rest = rows.length - list.limit;
+    const more = document.getElementById('more');
+    more.innerHTML = rest > 0 ? `<button class="btn-ghost" id="moreBtn">さらに表示（残り ${rest}人）</button>` : `<p class="faint">${rows.length}人を表示中</p>`;
+    const moreBtn = document.getElementById('moreBtn');
+    if (moreBtn) moreBtn.onclick = () => { list.limit += PAGE; renderRows(); };
+  }
+
+  function editParticipant(id) {
+    const r = list.rows.find((x) => x.id === id);
+    if (!r) return;
+    const el = modal(`
+      <div class="row"><h2 class="display grow" style="font-size:18px">No.${r.entry_no} ${esc(r.nickname)}</h2>${entryTag(r)}</div>
+      <form id="editForm" style="display:flex;flex-direction:column;gap:10px">
+        <label class="field">ニックネーム（画面に出る名前）<input type="text" name="nickname" value="${esc(r.nickname)}" maxlength="20" required></label>
+        <label class="field">お名前（任意）<input type="text" name="full_name" value="${esc(r.full_name || '')}" maxlength="40"></label>
+        <label class="field">所属（任意）<input type="text" name="affiliation" value="${esc(r.affiliation || '')}" maxlength="40"></label>
+        <label class="field">役割<select name="role">${roleOptions(r.role)}</select></label>
+        <label class="field">担当モンスター<select name="monster_id">${monsterOptions(r.monster_id)}</select></label>
+        <button class="btn">保存</button>
+      </form>
+      <p class="faint">交流 ${r.encounter_people}人 ・ 発見 ${r.species_found}種 ・ ${r.bingo_lines} LINE</p>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn-ghost" data-act="card">🎫 受付カードを${r.checked_in_at ? '再発行（今のスマホはログアウト）' : '発行'}</button>
+        <button class="btn-ghost" data-act="absent">${r.absent_at ? '↩ 欠席を取り消す（参加に戻す）' : '🚫 欠席にする（人数・交換から外す。あとで戻せます）'}</button>
+        ${r.checked_in_at && !r.absent_at ? '<button class="btn-ghost" data-act="uncheck">↩ 入場を取り消す（受付のやり直し）</button>' : ''}
+        <button class="btn-ghost" data-act="rotate" style="color:var(--witch)">交換用QRを作り直す（スクショ共有の疑いがある時）</button>
+        <button class="btn-danger" data-act="remove">この人を削除（元に戻せません。通常は「欠席」を使ってください）</button>
+        <button class="link" data-act="close" style="align-self:center">閉じる</button>
+      </div>`);
+    const after = async () => { await loadDashboard(); await reloadParticipants(); renderRows(); };
+    el.querySelector('#editForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      const ok = await run(() => admin('mb_admin_update_participant', { p_event_id: current.eventId, p_participant_id: id, p_patch: {
+        nickname: field(f, 'nickname').value, full_name: field(f, 'full_name').value, affiliation: field(f, 'affiliation').value,
+        role: field(f, 'role').value, monster_id: field(f, 'monster_id').value } }), '保存しました');
+      if (ok) { el.remove(); await after(); }
+    };
+    el.querySelectorAll('[data-act]').forEach((b) => (b.onclick = async () => {
+      const act = b.dataset.act;
+      if (act === 'close') return el.remove();
+      if (act === 'card') {
+        if (r.checked_in_at && !confirm('この人のスマホはログアウトされ、新しいカードで入り直しになります。発行しますか？')) return;
+        const cards = await run(() => admin('mb_admin_issue_logins', { p_event_id: current.eventId, p_participant_ids: [id] }));
+        if (cards) { el.remove(); showCards(cards); await after(); }
+        return;
+      }
+      if (act === 'absent') {
+        await run(() => admin('mb_admin_update_participant', { p_event_id: current.eventId, p_participant_id: id, p_patch: { absent: !r.absent_at } }), r.absent_at ? '参加に戻しました' : '欠席にしました');
+      } else if (act === 'uncheck') {
+        await run(() => admin('mb_admin_update_participant', { p_event_id: current.eventId, p_participant_id: id, p_patch: { checked_in: false } }), '入場を取り消しました');
+      } else if (act === 'rotate') {
+        if (!confirm('交換用のQRを作り直しますか？（古いQR・スクショは使えなくなります）')) return;
+        await run(() => admin('mb_admin_rotate_qr', { p_event_id: current.eventId, p_participant_id: id }), 'QRを作り直しました');
+      } else if (act === 'remove') {
+        if (!confirm(`No.${r.entry_no} ${r.nickname} さんを削除しますか？（元に戻せません）`)) return;
         await run(() => admin('mb_admin_remove_participant', { p_event_id: current.eventId, p_participant_id: id }), '削除しました');
-        await loadDashboard(); tabParticipants(box);
-      };
-    });
+      }
+      el.remove(); await after();
+    }));
+  }
+
+  // ---- 受付カード（91×55mm・A4に10枚）
+  //   QR＝読むだけで本人としてログインできるURL。読めない時のために 受付番号＋4桁PIN も載せる。
+  //   PIN とログイン情報はこの画面にしか出ない。閉じると二度と表示できない（必要なら再発行）
+  function cardHtml(card, x, y) {
+    const url = `${participantAppUrl()}?s=${encodeURIComponent(card.sessionToken)}`;
+    return `<div class="card91" style="left:${x}mm;top:${y}mm">
+      <div class="qrp">${qrSvg(url, 'M')}</div>
+      <div class="info">
+        <p class="brand">🎃 MONSTER BINGO</p>
+        <p class="ev">${esc(ev().name)}</p>
+        <p class="nick">${esc(card.nickname)}</p>
+        <p class="aff">${esc(card.affiliation || '')}</p>
+        <div class="creds"><div><small>受付番号</small><b>${card.entryNo}</b></div><div><small>PIN</small><b>${card.pin}</b></div></div>
+        <p class="how">① スマホのカメラでQRを読む<br>② 読めない時は ${esc(participantAppUrl().replace(/^https?:\/\//, ''))} を開き「番号で入る」→ コード <b>${esc(ev().code)}</b>・番号・PIN</p>
+      </div>
+    </div>`;
+  }
+  function sheetPages(cards) {
+    const pages = [];
+    for (let i = 0; i < cards.length; i += 10) {
+      const slice = cards.slice(i, i + 10);
+      pages.push(`<div class="sheet-page">${slice.map((c, k) => cardHtml(c, 14 + (k % 2) * 91, 11 + Math.floor(k / 2) * 55)).join('')}</div>`);
+    }
+    return pages.join('');
+  }
+  function showCards(cards) {
+    if (!cards.length) return toast('発行できる人がいませんでした');
+    const pages = sheetPages(cards);
+    document.getElementById('printSheet').innerHTML = pages;
+    const view = document.createElement('div');
+    view.className = 'print-preview';
+    view.innerHTML = `
+      <div class="bar">
+        <b class="grow">受付カード ${cards.length}枚（A4 ${Math.ceil(cards.length / 10)}ページ）</b>
+        <button class="btn" id="doPrint">🖨 印刷する</button>
+        <button class="btn-ghost" id="closePrint">閉じる</button>
+        <p class="faint" style="width:100%">印刷設定：用紙 A4・倍率 100%（「用紙に合わせる」はオフ）・余白なし。印刷したら1枚、スマホで読めるか試してから配ってください。<br>
+          この画面を閉じるとPINは二度と表示できません（必要ならその人だけ再発行）。</p>
+      </div>
+      <div id="pagesPreview">${pages}</div>`;
+    document.body.appendChild(view);
+    // 画面幅に合わせて縮小表示（印刷は #printSheet 側を原寸で出すので、ここの縮小は紙に影響しない）
+    const fit = () => { const scale = Math.min(1, (window.innerWidth - 32) / (210 * 96 / 25.4)); view.querySelectorAll('#pagesPreview .sheet-page').forEach((p) => { p.style.zoom = scale; }); };
+    fit(); window.addEventListener('resize', fit);
+    view.querySelector('#doPrint').onclick = () => window.print();
+    view.querySelector('#closePrint').onclick = () => {
+      if (!confirm('閉じるとPINは二度と表示できません。印刷は済みましたか？')) return;
+      window.removeEventListener('resize', fit);
+      view.remove(); document.getElementById('printSheet').innerHTML = '';
+    };
   }
 
   // ---- 交換履歴・不正ログ
