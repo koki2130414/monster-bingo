@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>MONSTER BINGO 管理</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<style>
+/* 運営用：PCでもスマホでも使える1カラム＋タブの管理画面 */
+:root {
+  --night: #0b0a10; --night-2: #12101a; --night-3: #1b1826; --night-4: #262236; --line: rgba(255,255,255,.1);
+  --text: #f6f3ff; --muted: rgba(246,243,255,.62); --faint: rgba(246,243,255,.42);
+  --pumpkin: #ff7a1a; --pumpkin-soft: #ffb870; --witch: #ae7bff; --good: #6ee7a1; --warn: #fcd34d; --bad: #ff9a9a;
+  --font-display: "Dela Gothic One", "Hiragino Sans", sans-serif;
+  --font-body: "M PLUS Rounded 1c", "Hiragino Sans", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--night); color: var(--text); font: 500 14px var(--font-body); }
+[hidden] { display: none !important; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: 3px solid var(--pumpkin-soft); outline-offset: 2px; }
+h1, h2, p { margin: 0; }
+.display { font-family: var(--font-display); font-weight: 400; letter-spacing: .02em; }
+.wrap { max-width: 1080px; margin: 0 auto; padding-block: 24px 80px; padding-inline: 16px; display: flex; flex-direction: column; gap: 16px; }
+.panel { background: linear-gradient(160deg, rgba(52,48,74,.7), rgba(18,16,26,.9)); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+.muted { color: var(--muted); } .faint { color: var(--faint); font-size: 12px; }
+.row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.grow { flex: 1; min-width: 0; }
+.grid { display: grid; gap: 14px; }
+.grid-2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+input[type=text], input[type=email], input[type=password], input[type=url], select {
+  border-radius: 10px; border: 1px solid rgba(255,255,255,.16); background: rgba(11,10,16,.6); padding: 9px 12px; min-width: 0; }
+.btn { border: 0; border-radius: 12px; padding: 10px 16px; font-weight: 800; background: var(--pumpkin); color: var(--night); }
+.btn:disabled { opacity: .4; }
+.btn-ghost { border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.05); border-radius: 12px; padding: 9px 14px; font-weight: 800; }
+.btn-danger { border: 1px solid rgba(255,154,154,.4); background: none; color: var(--bad); border-radius: 12px; padding: 9px 14px; font-weight: 800; }
+.link { background: none; border: 0; padding: 0; text-decoration: underline; font-weight: 800; font-size: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile .v { font-family: var(--font-display); font-size: 30px; font-variant-numeric: tabular-nums; }
+.tile .v small { font-size: 13px; color: var(--faint); margin-left: 4px; }
+.tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 14px; font-weight: 800; color: var(--muted); white-space: nowrap; }
+.tabs button[aria-selected=true] { color: var(--pumpkin-soft); border-color: var(--pumpkin); }
+.status { border-radius: 999px; padding: 3px 10px; font-size: 12px; font-weight: 800; }
+.status.draft { background: rgba(174,123,255,.2); color: var(--witch); }
+.status.active { background: rgba(110,231,161,.18); color: var(--good); }
+.status.ended { background: rgba(255,255,255,.1); color: var(--muted); }
+.count { border-radius: 999px; background: #e5484d; color: #fff; font-size: 10px; padding: 0 6px; margin-left: 4px; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11px; color: var(--faint); padding: 8px; font-weight: 800; }
+td { padding: 8px; border-top: 1px solid rgba(255,255,255,.06); vertical-align: middle; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.bar-row { display: grid; grid-template-columns: 26px 120px 1fr 36px; gap: 8px; align-items: center; }
+.bar { height: 12px; border-radius: 999px; background: var(--night); overflow: hidden; }
+.bar > div { height: 100%; border-radius: 999px; }
+.people { display: flex; flex-direction: column; gap: 4px; max-height: 280px; overflow-y: auto; }
+.people div { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); }
+.radio { display: flex; gap: 8px; align-items: flex-start; padding: 10px; border-radius: 10px; background: rgba(255,255,255,.05); cursor: pointer; }
+.radio input { margin-top: 3px; accent-color: var(--pumpkin); }
+.monster-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 10px 12px; }
+.monster-row.inactive { opacity: .5; }
+.qr { background: #fff; border-radius: 12px; padding: 8px; width: 220px; max-width: 100%; }
+.qr svg { display: block; width: 100%; height: auto; }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--night-4); border: 1px solid var(--line); border-radius: 12px; padding: 10px 18px; font-weight: 800; z-index: 20; max-width: calc(100% - 32px); }
+.error { color: var(--bad); font-weight: 800; }
+.modal { position: fixed; inset: 0; background: rgba(11,10,16,.85); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 30; }
+.modal .panel { max-width: 440px; width: 100%; display: flex; flex-direction: column; gap: 12px; }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script>
+(function () {
+  'use strict';
+  const CONFIG = window.MONSTER_BINGO_CONFIG || {};
+  const TOKEN_KEY = 'mb_admin_token';
+  const app = document.getElementById('app');
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) {} }, remove: (k) => { try { localStorage.removeItem(k); } catch (e) {} } };
+  const participantAppUrl = () => new URL('./', location.href).href;
+  const ROLE = { guest: '参加者', staff: 'スタッフ', organizer: '主催者', sponsor: 'スポンサー', vip: 'ゲスト' };
+  const RARITY = { normal: '通常', rare: 'RARE', secret: 'SECRET' };
+  const STATUS = { draft: '準備中', active: '開催中', ended: '終了' };
+  const FRAUD = { SELF_SCAN: '自分のQRを読み込もうとした', INVALID_TOKEN: '無効なQRを読み込んだ', RAPID_SCANS: '1分間に大量の交換', QR_SHARED_SUSPECT: '短時間に多数から読まれた（QRスクショ共有の疑い）' };
+  const time = (t) => new Date(t).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+
+  async function rpc(fn, args) {
+    const response = await fetch(`${CONFIG.supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json', apikey: CONFIG.supabaseAnonKey },
+        // 旧形式の anon キー（JWT）の時だけ Authorization も付ける。新形式の Publishable key は apikey だけで通る
+        /^eyJ/.test(CONFIG.supabaseAnonKey) ? { Authorization: `Bearer ${CONFIG.supabaseAnonKey}` } : {}),
+      body: JSON.stringify(args || {}),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      if (body && body.hint === 'ADMIN_REQUIRED') { store.remove(TOKEN_KEY); renderLogin('ログインの有効期限が切れました'); }
+      const error = new Error((body && body.message) || '通信に失敗しました');
+      error.hint = body && body.hint;
+      throw error;
+    }
+    return body;
+  }
+  const admin = (fn, args) => rpc(fn, Object.assign({ p_admin_token: store.get(TOKEN_KEY) }, args || {}));
+
+  let toastTimer;
+  function toast(message) {
+    document.querySelectorAll('.toast').forEach((t) => t.remove());
+    const el = document.createElement('div'); el.className = 'toast'; el.textContent = message; document.body.appendChild(el);
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => el.remove(), 3000);
+  }
+  async function run(action, success) {
+    try { const result = await action(); if (success) toast(success); return result; } catch (error) { if (error.hint !== 'ADMIN_REQUIRED') toast('⚠️ ' + error.message); return null; }
+  }
+  function qrSvg(text) {
+    const qr = window.qrcode(0, 'M'); qr.addData(text); qr.make();
+    return qr.createSvgTag({ cellSize: 6, margin: 1, scalable: true });
+  }
+
+  // ---------------------------------------------------------------- ログイン
+  function renderLogin(message) {
+    stopPolling();
+    app.innerHTML = `
+      <div style="max-width:380px;margin:10vh auto 0;width:100%;display:flex;flex-direction:column;gap:16px">
+        <h1 class="display" style="font-size:28px"><span style="color:var(--pumpkin)">ADMIN</span> LOGIN</h1>
+        <p class="muted">MONSTER BINGO 運営管理</p>
+        <form class="panel" id="login" style="display:flex;flex-direction:column;gap:10px">
+          <input type="email" id="email" placeholder="メールアドレス" autocomplete="username" required>
+          <input type="password" id="password" placeholder="パスワード" autocomplete="current-password" required>
+          <p class="error" id="loginError" ${message ? '' : 'hidden'}>${esc(message || '')}</p>
+          <button class="btn">ログイン</button>
+        </form>
+      </div>`;
+    document.getElementById('login').onsubmit = async (e) => {
+      e.preventDefault();
+      const errorBox = document.getElementById('loginError');
+      try {
+        const result = await rpc('mb_admin_login', { p_email: document.getElementById('email').value, p_password: document.getElementById('password').value });
+        if (!result.ok) { errorBox.hidden = false; errorBox.textContent = result.message; return; }
+        store.set(TOKEN_KEY, result.token);
+        renderEventList();
+      } catch (error) { errorBox.hidden = false; errorBox.textContent = error.message; }
+    };
+  }
+
+  // ---------------------------------------------------------------- イベント一覧
+  async function renderEventList() {
+    stopPolling();
+    app.innerHTML = '<p class="muted">読み込み中…</p>';
+    const events = await admin('mb_admin_events');
+    app.innerHTML = `
+      <div class="row"><h1 class="display grow" style="font-size:26px"><span style="color:var(--pumpkin)">MONSTER BINGO</span> ADMIN</h1><button class="link" id="logout">ログアウト</button></div>
+      <form class="panel row" id="create">
+        <input type="text" id="eventName" placeholder="イベント名（例：HALLOWEEN NIGHT 2026）" class="grow" style="min-width:220px" required>
+        <input type="text" id="eventCode" placeholder="コード（空欄で自動）" style="width:180px;text-transform:uppercase">
+        <button class="btn">＋ イベント作成</button>
+        <p class="faint" style="width:100%">作成すると定番モンスター24体が自動で登録されます（あとから編集可）。</p>
+      </form>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${events.map((e) => `<button class="panel row" data-open="${e.id}" style="text-align:left;cursor:pointer;padding:14px">
+          <span class="status ${e.status}">${STATUS[e.status]}</span><span class="grow" style="font-weight:800">${esc(e.name)}</span>
+          <span style="font-family:monospace;color:var(--pumpkin-soft)">${esc(e.code)}</span><span class="muted">${e.participant_count}人</span></button>`).join('') || '<p class="faint" style="text-align:center">まだイベントがありません</p>'}
+      </div>`;
+    document.getElementById('logout').onclick = async () => { await admin('mb_admin_logout').catch(() => {}); store.remove(TOKEN_KEY); renderLogin(); };
+    document.getElementById('create').onsubmit = async (e) => {
+      e.preventDefault();
+      await run(() => admin('mb_admin_create_event', { p_name: document.getElementById('eventName').value, p_code: document.getElementById('eventCode').value || null }), 'イベントを作成しました');
+      renderEventList();
+    };
+    app.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openEvent(b.dataset.open).catch((e) => toast('⚠️ ' + e.message))));
+  }
+
+  // ---------------------------------------------------------------- イベント詳細
+  let current = { eventId: null, tab: 'dashboard', dashboard: null, participants: null };
+  let pollTimer = null;
+  const stopPolling = () => { clearInterval(pollTimer); pollTimer = null; };
+
+  async function openEvent(eventId) {
+    current = { eventId, tab: 'dashboard', dashboard: null, participants: null };
+    await loadDashboard();
+    renderEvent();
+    stopPolling();
+    pollTimer = setInterval(async () => {
+      if (document.visibilityState !== 'visible') return;
+      try {
+        if (current.tab === 'dashboard') { await loadDashboard(); await renderTab(); }
+        if (current.tab === 'encounters' || current.tab === 'fraud') await renderTab();
+      } catch (e) { /* 通信が不安定でも次の更新で取り直す */ }
+    }, 5000);
+  }
+  async function loadDashboard() { current.dashboard = await admin('mb_admin_dashboard', { p_event_id: current.eventId }); }
+  const ev = () => current.dashboard.event;
+
+  function renderEvent() {
+    const e = ev();
+    const tabs = [['dashboard', 'ダッシュボード'], ['settings', '設定'], ['monsters', 'モンスター'], ['participants', '参加者'], ['encounters', '交換履歴'], ['fraud', '不正ログ']];
+    app.innerHTML = `
+      <button class="link" id="back" style="align-self:flex-start">← イベント一覧</button>
+      <div class="row">
+        <h1 class="display grow" style="font-size:22px">${esc(e.name)} <span style="font-family:monospace;font-size:14px;color:var(--pumpkin-soft)">${esc(e.code)}</span></h1>
+        <span class="status ${e.status}">${STATUS[e.status]}</span>
+        ${e.status !== 'active' ? '<button class="btn" id="start">▶ イベント開始</button>' : '<button class="btn-ghost" id="end">■ 終了</button>'}
+      </div>
+      <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" data-tab="${k}" aria-selected="${current.tab === k}">${l}${k === 'fraud' && current.dashboard.totals.fraudLogs ? `<span class="count">${current.dashboard.totals.fraudLogs}</span>` : ''}</button>`).join('')}</div>
+      <section id="tab"></section>`;
+    document.getElementById('back').onclick = renderEventList;
+    const setStatus = async (status) => { await run(() => admin('mb_admin_update_event', { p_event_id: current.eventId, p_patch: { status } }), '状態を変更しました'); await loadDashboard(); renderEvent(); };
+    const startButton = document.getElementById('start');
+    if (startButton) startButton.onclick = () => setStatus('active');
+    const endButton = document.getElementById('end');
+    if (endButton) endButton.onclick = () => { if (confirm('イベントを終了しますか？（交換できなくなります）')) setStatus('ended'); };
+    app.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => { current.tab = b.dataset.tab; renderEvent(); }));
+    renderTab();
+  }
+
+  async function renderTab() {
+    const box = document.getElementById('tab');
+    if (!box) return;
+    const renderer = { dashboard: tabDashboard, settings: tabSettings, monsters: tabMonsters, participants: tabParticipants, encounters: tabEncounters, fraud: tabFraud }[current.tab];
+    try { await renderer(box); } catch (e) { if (e.hint !== 'ADMIN_REQUIRED') box.innerHTML = `<p class="error">${esc(e.message)}</p>`; }
+  }
+
+  // ---- ダッシュボード
+  function tabDashboard(box) {
+    const d = current.dashboard, t = d.totals;
+    const joinUrl = `${participantAppUrl()}?e=${encodeURIComponent(ev().code)}`;
+    const maxAssigned = Math.max(1, ...d.monsters.map((m) => m.assigned_count));
+    const people = (list, empty) => list.length ? list.map((p) => `<div><b>${esc(p.nickname)}</b><span class="faint">交流${p.encounterPeople}人 · 参加 ${time(p.joinedAt)}</span></div>`).join('') : `<p class="faint">${empty}</p>`;
+    box.innerHTML = `
+      <div class="grid">
+        <div class="tiles">${[['参加者', t.participants, '人'], ['総交流数', t.encounters, '回'], ['平均交流人数', t.averageEncounterPeople, '人'], ['BINGO達成', t.bingoAchievers, '人'], ['カード完成', t.cardCompleters, '人']]
+          .map(([l, v, u]) => `<div class="panel tile"><p class="faint">${l}</p><p class="v">${v}<small>${u}</small></p></div>`).join('')}</div>
+        <p class="faint" style="text-align:right">5秒ごとに自動更新</p>
+        <div class="grid grid-2">
+          <div class="panel"><h2 class="display" style="font-size:16px;color:var(--bad)">まだ一度も交流していない人 <span class="muted">${d.notYetInteracted.length}人</span></h2><p class="faint" style="margin:4px 0 10px">運営だけに表示されます。スタッフから声をかけてあげてください。</p><div class="people">${people(d.notYetInteracted, '全員が交流しています 🎉')}</div></div>
+          <div class="panel"><h2 class="display" style="font-size:16px;color:var(--warn)">交流が少ない人 <span class="muted">${d.fewInteractions.length}人</span></h2><p class="faint" style="margin:4px 0 10px">参加から10分以上たって、交流が2人以下の人</p><div class="people">${people(d.fewInteractions, '該当者なし')}</div></div>
+        </div>
+        <div class="grid grid-2">
+          <div class="panel"><h2 class="display" style="font-size:16px">モンスター別 担当人数</h2><p class="faint" style="margin:4px 0 12px">通常モンスターを均等配布（RARE / SECRET は参加者タブで手動付与）</p>
+            <div style="display:flex;flex-direction:column;gap:6px">${d.monsters.filter((m) => m.is_active).map((m) => `<div class="bar-row"><span>${esc(m.emoji)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800">${esc(m.name)}${m.rarity !== 'normal' ? ` <small style="color:var(--witch)">${RARITY[m.rarity]}</small>` : ''}</span><div class="bar"><div style="width:${m.assigned_count / maxAssigned * 100}%;background:${/^#[0-9a-f]{6}$/i.test(m.color) ? m.color : '#ff7a1a'}"></div></div><span style="text-align:right;font-family:monospace">${m.assigned_count}</span></div>`).join('')}</div></div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <div class="panel" style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><h2 class="display" style="font-size:16px">受付用QR</h2><div class="qr">${qrSvg(joinUrl)}</div><p class="faint" style="word-break:break-all">${esc(joinUrl)}</p><p class="faint">この画面を印刷・拡大して受付に掲示してください</p></div>
+            <div class="panel" style="display:flex;flex-direction:column;gap:8px"><h2 class="display" style="font-size:16px">データ・リセット</h2>
+              <button class="btn-ghost" id="csv">⬇ 参加者データCSV</button>
+              <button class="btn-danger" id="reset">ゲームリセット</button></div>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('csv').onclick = downloadCsv;
+    document.getElementById('reset').onclick = async () => {
+      if (prompt('交換履歴・獲得・不正ログをすべて消します。よろしければ RESET と入力') !== 'RESET') return;
+      const regenerate = confirm('カードも作り直しますか？（FREEマス設定やモンスター追加を反映したい時は OK）');
+      await run(() => admin('mb_admin_reset', { p_event_id: current.eventId, p_regenerate_cards: regenerate }), 'ゲームをリセットしました');
+      await loadDashboard(); renderTab();
+    };
+  }
+
+  async function downloadCsv() {
+    const rows = await admin('mb_admin_participants', { p_event_id: current.eventId });
+    const total = current.dashboard.speciesTotal || 1;
+    const cell = (v) => { let s = v == null ? '' : String(v); if (/^[=+\-@]/.test(s)) s = "'" + s; return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const header = ['ニックネーム', '役割', '担当モンスター', 'レア度', '交流人数', '発見種類', 'コンプリート率(%)', 'BINGOライン', 'OPENマス', '初BINGO', 'カード完成', '参加日時'];
+    const lines = rows.map((r) => [r.nickname, ROLE[r.role], r.monster_name, r.monster_rarity, r.encounter_people, r.species_found, Math.round(r.species_found / total * 100), r.bingo_lines, r.opened_cells, r.first_bingo_at || '', r.completed_at || '', r.created_at].map(cell).join(','));
+    const blob = new Blob(['﻿' + [header.join(','), ...lines].join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `monster-bingo-${ev().code}.csv`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  }
+
+  // ---- 設定
+  function tabSettings(box) {
+    const e = ev();
+    const radio = (name, options) => options.map(([value, label, hint]) => `<label class="radio"><input type="radio" name="${name}" value="${value}" ${String(e[name]) === String(value) ? 'checked' : ''}><span><b>${label}</b>${hint ? `<br><span class="faint">${hint}</span>` : ''}</span></label>`).join('');
+    box.innerHTML = `
+      <form id="settings" class="grid grid-2">
+        <div class="panel" style="display:flex;flex-direction:column;gap:10px">
+          <h2 class="display" style="font-size:16px">イベント名</h2><input type="text" id="name" value="${esc(e.name)}">
+          <h2 class="display" style="font-size:16px;margin-top:8px">交換方式</h2>
+          ${radio('exchange_mode', [['both', '双方が自動で獲得（推奨）', '読み込んだ人・読まれた人の両方が相手のモンスターを獲得'], ['scanner_only', '読み込んだ人だけ獲得', '読まれた側も欲しい場合は、相手のQRを読み返す']])}
+          <h2 class="display" style="font-size:16px;margin-top:8px">FREEマス</h2>
+          ${radio('free_cell_enabled', [['true', 'FREEあり（中央）'], ['false', 'FREEなし', '既存のカードに反映するには、ゲームリセットでカードを作り直します']])}
+        </div>
+        <div class="panel" style="display:flex;flex-direction:column;gap:10px">
+          <h2 class="display" style="font-size:16px">GET時の名前表示</h2>
+          ${radio('name_display_mode', [['nickname', 'ニックネームのみ（推奨）', '「こうきさんのゴーストをGET！」'], ['full_name', '名前を表示する', '参加登録で任意の「お名前」欄を出す'], ['hidden', '名前を表示しない', '「ゴーストを発見！」']])}
+          <h2 class="display" style="font-size:16px;margin-top:8px">ランキング</h2>
+          ${radio('ranking_enabled', [['true', 'ON'], ['false', 'OFF', 'QRを読むだけの競争になりそうな時はOFFに']])}
+          <select id="ranking_metric">${[['species', 'モンスター獲得種類数'], ['encounters', '交流人数'], ['bingo', 'BINGO数'], ['completion', 'コンプリート率']].map(([v, l]) => `<option value="${v}" ${e.ranking_metric === v ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          <h2 class="display" style="font-size:16px;margin-top:8px">不正防止・上限</h2>
+          <label class="row">連続スキャンの間隔 <input type="text" inputmode="numeric" id="cooldown" value="${e.exchange_cooldown_seconds}" style="width:70px"> 秒</label>
+          <label class="row">参加人数の上限 <input type="text" inputmode="numeric" id="maxp" value="${e.max_participants}" style="width:90px"> 人</label>
+        </div>
+        <button class="btn" style="grid-column:1/-1;padding:14px">設定を保存</button>
+      </form>`;
+    document.getElementById('settings').onsubmit = async (event) => {
+      event.preventDefault();
+      const form = event.target;
+      const value = (name) => form.querySelector(`input[name=${name}]:checked`).value;
+      await run(() => admin('mb_admin_update_event', { p_event_id: current.eventId, p_patch: {
+        name: document.getElementById('name').value,
+        exchange_mode: value('exchange_mode'),
+        free_cell_enabled: value('free_cell_enabled') === 'true',
+        name_display_mode: value('name_display_mode'),
+        ranking_enabled: value('ranking_enabled') === 'true',
+        ranking_metric: document.getElementById('ranking_metric').value,
+        exchange_cooldown_seconds: Number(document.getElementById('cooldown').value) || 0,
+        max_participants: Number(document.getElementById('maxp').value) || 500,
+      } }), '設定を保存しました');
+      await loadDashboard(); renderEvent();
+    };
+  }
+
+  // ---- モンスター
+  const field = (form, name) => form.elements.namedItem(name);
+  function tabMonsters(box) {
+    const monsters = current.dashboard.monsters;
+    const rarityOptions = (selected) => Object.entries(RARITY).map(([v, l]) => `<option value="${v}" ${v === selected ? 'selected' : ''}>${l}</option>`).join('');
+    box.innerHTML = `
+      <div class="grid">
+        <form class="panel row" id="addMonster">
+          <input type="text" id="newEmoji" value="🎃" style="width:60px;text-align:center;font-size:18px" aria-label="絵文字">
+          <input type="text" id="newName" placeholder="モンスター名（例：GOLD PUMPKIN）" class="grow" required>
+          <input type="color" id="newColor" value="#f5c542" aria-label="色">
+          <select id="newRarity">${rarityOptions('rare')}</select>
+          <button class="btn">＋ 追加</button>
+        </form>
+        <p class="faint">通常＝自動配布＆カードに登場 ／ RARE＝カードに登場・参加者タブで特定の人に付与 ／ SECRET＝カードに出ない隠しモンスター。画像URL（https）を入れると絵文字の代わりに表示。追加したモンスターは、これから参加する人のカードに入ります（既存カードはリセット時に反映）。</p>
+        ${monsters.map((m) => `
+          <form class="panel monster-row ${m.is_active ? '' : 'inactive'}" data-monster="${m.id}">
+            <input type="text" name="emoji" value="${esc(m.emoji)}" style="width:56px;text-align:center;font-size:18px" aria-label="絵文字">
+            <input type="text" name="name" value="${esc(m.name)}" style="width:150px" aria-label="名前">
+            <input type="color" name="color" value="${/^#[0-9a-f]{6}$/i.test(m.color) ? m.color : '#ff7a1a'}" aria-label="色">
+            <select name="rarity" aria-label="レア度">${rarityOptions(m.rarity)}</select>
+            <input type="url" name="image_url" value="${esc(m.image_url || '')}" placeholder="画像URL（任意）" class="grow" style="min-width:160px">
+            <span class="faint">担当${m.assigned_count}人</span>
+            <label class="row" style="gap:4px"><input type="checkbox" name="is_active" ${m.is_active ? 'checked' : ''}> 有効</label>
+            <button class="btn">保存</button>
+            <button type="button" class="btn-danger" data-delete="${m.id}">削除</button>
+          </form>`).join('')}
+      </div>`;
+    document.getElementById('addMonster').onsubmit = async (e) => {
+      e.preventDefault();
+      await run(() => admin('mb_admin_save_monster', { p_event_id: current.eventId, p_monster_id: null, p_data: { emoji: document.getElementById('newEmoji').value, name: document.getElementById('newName').value, color: document.getElementById('newColor').value, rarity: document.getElementById('newRarity').value } }), 'モンスターを追加しました');
+      await loadDashboard(); renderTab();
+    };
+    box.querySelectorAll('[data-monster]').forEach((form) => (form.onsubmit = async (e) => {
+      e.preventDefault();
+      const f = e.target;
+      await run(() => admin('mb_admin_save_monster', { p_event_id: current.eventId, p_monster_id: f.dataset.monster, p_data: { emoji: field(f, 'emoji').value, name: field(f, 'name').value, color: field(f, 'color').value, rarity: field(f, 'rarity').value, image_url: field(f, 'image_url').value, is_active: field(f, 'is_active').checked } }), '保存しました');
+      await loadDashboard(); renderTab();
+    }));
+    box.querySelectorAll('[data-delete]').forEach((b) => (b.onclick = async () => {
+      if (!confirm('削除しますか？（使用中のモンスターは無効化のみ）')) return;
+      const r = await run(() => admin('mb_admin_delete_monster', { p_event_id: current.eventId, p_monster_id: b.dataset.delete }));
+      if (!r) return;
+      toast(r.result === 'deleted' ? '削除しました' : '使用中のため無効化しました');
+      await loadDashboard(); renderTab();
+    }));
+  }
+
+  // ---- 参加者
+  async function tabParticipants(box, claim) {
+    box.innerHTML = '<p class="muted">読み込み中…</p>';
+    const rows = await admin('mb_admin_participants', { p_event_id: current.eventId });
+    const monsters = current.dashboard.monsters;
+    const monsterOptions = (selected) => monsters.map((m) => `<option value="${m.id}" ${m.id === selected ? 'selected' : ''}>${esc(m.emoji)} ${esc(m.name)}${m.rarity !== 'normal' ? `【${RARITY[m.rarity]}】` : ''}${m.is_active ? '' : '（無効）'}</option>`).join('');
+    const roleOptions = (selected) => Object.entries(ROLE).map(([v, l]) => `<option value="${v}" ${v === selected ? 'selected' : ''}>${l}</option>`).join('');
+    box.innerHTML = `
+      <div class="grid">
+        <form class="panel row" id="addParticipant">
+          <b style="width:100%">参加者を追加（スタッフ・主催者・スポンサー・ゲストなど）</b>
+          <input type="text" id="pNick" placeholder="ニックネーム" class="grow" required>
+          <select id="pRole">${roleOptions('staff')}</select>
+          <select id="pMonster"><option value="">モンスター：自動（均等配布）</option>${monsterOptions(null)}</select>
+          <button class="btn">＋ 追加</button>
+        </form>
+        ${claim ? `<div class="panel row" style="border-color:rgba(255,122,26,.5)"><div class="qr" style="width:150px">${qrSvg(claim.url)}</div>
+          <div class="grow"><b>${esc(claim.nickname)} さんのスマホでこのQRを読むとログインできます</b><p class="faint" style="word-break:break-all;margin-top:6px">${esc(claim.url)}</p><p class="error" style="font-size:12px;margin-top:6px">このリンクは本人専用のログイン情報です。本人以外に共有しないでください。</p></div></div>` : ''}
+        <div class="row"><input type="text" id="search" placeholder="ニックネームで検索" class="grow"><span class="faint">${rows.length}人</span></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>ニックネーム</th><th>役割</th><th>担当モンスター</th><th class="num">交流</th><th class="num">発見</th><th class="num">LINE</th><th></th></tr></thead>
+          <tbody>${rows.map((r) => `<tr data-row="${r.id}" data-nick="${esc(r.nickname.toLowerCase())}">
+            <td><b>${esc(r.nickname)}</b></td>
+            <td><select data-field="role">${roleOptions(r.role)}</select></td>
+            <td><select data-field="monster_id">${monsterOptions(r.monster_id)}</select></td>
+            <td class="num">${r.encounter_people}</td><td class="num">${r.species_found}/${current.dashboard.speciesTotal}</td><td class="num">${r.bingo_lines}</td>
+            <td style="white-space:nowrap;text-align:right"><button class="link" data-rotate style="color:var(--witch)">QR再発行</button>　<button class="link" data-remove style="color:var(--bad)">削除</button></td>
+          </tr>`).join('')}</tbody>
+        </table></div>
+      </div>`;
+    document.getElementById('addParticipant').onsubmit = async (e) => {
+      e.preventDefault();
+      const nickname = document.getElementById('pNick').value;
+      const created = await run(() => admin('mb_admin_add_participant', { p_event_id: current.eventId, p_nickname: nickname, p_role: document.getElementById('pRole').value, p_monster_id: document.getElementById('pMonster').value || null }), '参加者を追加しました');
+      if (!created) return;
+      await loadDashboard();
+      tabParticipants(box, { nickname, url: `${participantAppUrl()}?s=${encodeURIComponent(created.sessionToken)}` });
+    };
+    document.getElementById('search').oninput = (e) => {
+      const q = e.target.value.toLowerCase();
+      box.querySelectorAll('[data-row]').forEach((tr) => { tr.hidden = !tr.dataset.nick.includes(q); });
+    };
+    box.querySelectorAll('[data-row]').forEach((tr) => {
+      const id = tr.dataset.row;
+      tr.querySelectorAll('select[data-field]').forEach((s) => (s.onchange = async () => {
+        await run(() => admin('mb_admin_update_participant', { p_event_id: current.eventId, p_participant_id: id, p_patch: { [s.dataset.field]: s.value } }), '変更しました');
+        await loadDashboard();
+      }));
+      tr.querySelector('[data-rotate]').onclick = async () => {
+        if (!confirm('この人のQRを作り直しますか？（古いQR・スクショは使えなくなります）')) return;
+        await run(() => admin('mb_admin_rotate_qr', { p_event_id: current.eventId, p_participant_id: id }), 'QRを再発行しました');
+      };
+      tr.querySelector('[data-remove]').onclick = async () => {
+        if (!confirm('この参加者を削除しますか？')) return;
+        await run(() => admin('mb_admin_remove_participant', { p_event_id: current.eventId, p_participant_id: id }), '削除しました');
+        await loadDashboard(); tabParticipants(box);
+      };
+    });
+  }
+
+  // ---- 交換履歴・不正ログ
+  async function tabEncounters(box) {
+    const rows = await admin('mb_admin_encounters', { p_event_id: current.eventId });
+    box.innerHTML = `<p class="faint" style="margin-bottom:8px">最新300件（5秒ごとに更新）</p><div class="table-wrap"><table>
+      <thead><tr><th>時刻</th><th>読み込んだ人</th><th>獲得</th><th>読まれた人</th><th>獲得</th></tr></thead>
+      <tbody>${rows.map((r) => `<tr><td class="faint">${new Date(r.created_at).toLocaleTimeString('ja-JP')}</td><td><b>${esc(r.scanner_nickname)}</b></td><td>${esc(r.scanner_received_monster || '―')}</td><td><b>${esc(r.target_nickname)}</b></td><td>${esc(r.target_received_monster || '―')}</td></tr>`).join('')}</tbody>
+    </table></div>${rows.length ? '' : '<p class="faint" style="text-align:center;padding:20px">まだ交換はありません</p>'}`;
+  }
+  async function tabFraud(box) {
+    const rows = await admin('mb_admin_fraud_logs', { p_event_id: current.eventId });
+    box.innerHTML = `<p class="faint" style="margin-bottom:8px">「QRスクショ共有の疑い」が出た人は、参加者タブで QR再発行 すると古い画像が無効になります。</p>
+      <div style="display:flex;flex-direction:column;gap:6px">${rows.map((r) => `<div class="panel row" style="padding:10px 14px"><span class="faint">${new Date(r.created_at).toLocaleTimeString('ja-JP')}</span>
+        <span class="status" style="background:rgba(229,72,77,.2);color:var(--bad)">${esc(r.kind)}</span><b>${esc(r.nickname || '―')}</b><span class="muted grow">${esc(FRAUD[r.kind] || r.kind)}</span><span class="faint" style="font-family:monospace">${esc(JSON.stringify(r.detail))}</span></div>`).join('') || '<p class="faint" style="text-align:center;padding:20px">不正の疑いはありません</p>'}</div>`;
+  }
+
+  // ---------------------------------------------------------------- 起動
+  if (!CONFIG.supabaseUrl || CONFIG.supabaseUrl.includes('YOUR-PROJECT')) {
+    app.innerHTML = '<div class="panel"><p class="display" style="font-size:18px">接続設定がまだです</p><p class="muted" style="margin-top:8px">config.js に Supabase の URL と anon キーを入れてください。</p></div>';
+    return;
+  }
+  if (store.get(TOKEN_KEY)) renderEventList().catch(() => {}); else renderLogin();
+})();
+</script>
+</body>
+</html>

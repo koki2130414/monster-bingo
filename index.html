@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0a10">
+<meta name="description" content="話しかけるほど、モンスターが集まる。ハロウィン交流ビンゴ">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>MONSTER BINGO</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap">
+<script src="config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js" defer></script>
+<style>
+/* スマホ1画面のゲームアプリ：上にヘッダー、中央に各タブ、下に SCAN を大きく置いたナビ */
+:root {
+  --night: #0b0a10; --night-2: #12101a; --night-3: #1b1826; --night-4: #262236;
+  --line: rgba(255,255,255,.1); --text: #f6f3ff; --muted: rgba(246,243,255,.62); --faint: rgba(246,243,255,.4);
+  --pumpkin: #ff7a1a; --pumpkin-soft: #ffb870; --pumpkin-deep: #8a3800;
+  --witch: #ae7bff; --witch-deep: #6d2ee6; --gold: #f5c542; --danger: #ffb0b0;
+  --font-display: "Dela Gothic One", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --font-body: "M PLUS Rounded 1c", "Hiragino Maru Gothic ProN", "Hiragino Sans", system-ui, sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { padding-top: env(safe-area-inset-top, 0px); }
+body {
+  margin: 0; min-height: 100dvh; color: var(--text); font-family: var(--font-body); font-size: 15px;
+  background: radial-gradient(40rem 30rem at 110% -10%, rgba(139,77,255,.28), transparent 60%),
+              radial-gradient(36rem 28rem at -20% 110%, rgba(255,122,26,.18), transparent 60%), var(--night);
+  background-attachment: fixed; -webkit-tap-highlight-color: transparent; overscroll-behavior-y: none;
+}
+[hidden] { display: none !important; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--pumpkin-soft); outline-offset: 2px; }
+a { color: var(--pumpkin-soft); }
+h1, h2, p { margin: 0; text-wrap: balance; }
+.display { font-family: var(--font-display); font-weight: 400; letter-spacing: .02em; }
+.app { max-width: 460px; margin: 0 auto; }
+.screen { padding: 16px 16px 128px; display: flex; flex-direction: column; gap: 14px; }
+.center { min-height: 100dvh; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px 20px; gap: 14px; }
+.eyebrow { font-size: 11px; font-weight: 800; letter-spacing: .28em; color: var(--witch); }
+.muted { color: var(--muted); font-weight: 700; font-size: 13px; line-height: 1.7; }
+.faint { color: var(--faint); font-size: 11px; font-weight: 700; line-height: 1.6; }
+.title-grad { background: linear-gradient(180deg,#fff 10%,var(--pumpkin-soft) 55%,var(--pumpkin) 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+  filter: drop-shadow(0 3px 0 rgba(60,20,0,.9)) drop-shadow(0 0 16px rgba(255,122,26,.45)); }
+.glow-o { text-shadow: 0 0 18px rgba(255,122,26,.65), 0 2px 0 rgba(0,0,0,.6); }
+.glow-p { text-shadow: 0 0 18px rgba(174,123,255,.7), 0 2px 0 rgba(0,0,0,.6); }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; border-radius: 18px; padding: 16px 22px;
+  font-family: var(--font-display); font-size: 18px; color: var(--night); background: linear-gradient(180deg,var(--pumpkin-soft),var(--pumpkin) 55%,#e65f00);
+  box-shadow: 0 4px 0 var(--pumpkin-deep), 0 10px 30px -8px rgba(255,122,26,.7); }
+.btn:active { transform: translateY(2px); box-shadow: 0 2px 0 var(--pumpkin-deep); }
+.btn:disabled { opacity: .45; }
+.btn-ghost { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; border: 1px solid rgba(255,255,255,.16);
+  background: rgba(255,255,255,.05); border-radius: 16px; padding: 12px 16px; font-weight: 800; text-decoration: none; color: var(--text); }
+.panel { background: linear-gradient(160deg,rgba(52,48,74,.85),rgba(18,16,26,.92)); border: 1px solid var(--line); border-radius: 20px;
+  box-shadow: 0 1px 0 rgba(255,255,255,.08) inset, 0 18px 40px -18px rgba(0,0,0,.8); }
+input[type=text] { width: 100%; border-radius: 16px; border: 1px solid rgba(255,255,255,.16); background: rgba(11,10,16,.6); color: var(--text); padding: 15px 16px; font: 800 18px var(--font-body); }
+input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
+.error { border-radius: 14px; background: rgba(255,80,80,.14); color: var(--danger); padding: 12px 14px; font-weight: 800; font-size: 13px; }
+.row { display: flex; align-items: center; gap: 12px; }
+.row > .grow { flex: 1; min-width: 0; }
+
+.face { flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 50%; width: var(--s); height: var(--s); font-size: calc(var(--s) * .56); line-height: 1; overflow: hidden;
+  background: radial-gradient(circle at 35% 30%, var(--c), color-mix(in srgb, var(--c) 40%, transparent) 55%, var(--night-2) 100%);
+  box-shadow: 0 0 calc(var(--s) / 4) color-mix(in srgb, var(--c) 40%, transparent), inset 0 2px 0 rgba(255,255,255,.25); }
+.face img { width: 82%; height: 82%; object-fit: cover; border-radius: 50%; }
+.face.silhouette { background: radial-gradient(circle at 35% 30%, var(--night-4), var(--night-2)); box-shadow: inset 0 0 0 1px var(--line); }
+.face.silhouette > * { filter: brightness(0) opacity(.55); }
+.badge { font-family: var(--font-display); font-size: 9px; letter-spacing: .1em; border-radius: 999px; padding: 2px 8px; }
+.badge.rare { background: linear-gradient(90deg,var(--gold),var(--pumpkin)); color: var(--night); }
+.badge.secret { background: linear-gradient(90deg,var(--witch),#d946ef); color: #fff; }
+
+.topbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: rgba(11,10,16,.86); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255,255,255,.05); }
+.topbar .inner { max-width: 460px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 16px; }
+.banner { text-align: center; font-size: 12px; font-weight: 800; padding: 5px 12px; background: var(--witch-deep); }
+.banner.ended { background: var(--night-4); }
+.pill { border-radius: 999px; padding: 4px 10px; font-size: 11px; font-weight: 800; background: rgba(255,255,255,.1); white-space: nowrap; }
+.pill.orange { background: rgba(255,122,26,.2); color: var(--pumpkin-soft); }
+.nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 4px 4px calc(8px + env(safe-area-inset-bottom, 0px)); background: rgba(11,10,16,.93); backdrop-filter: blur(14px); border-top: 1px solid var(--line); }
+.nav ul { list-style: none; margin: 0 auto; padding: 0; max-width: 460px; display: grid; grid-template-columns: repeat(5,1fr); align-items: end; }
+.nav button { width: 100%; background: none; border: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; font-size: 9px; font-weight: 800; color: var(--faint); }
+.nav button .ic { font-size: 20px; line-height: 1; filter: grayscale(.4); }
+.nav button[aria-current=page] { color: var(--pumpkin-soft); }
+.nav button[aria-current=page] .ic { filter: none; }
+.nav .scan-btn { margin: -30px auto 0; width: 76px; height: 76px; border-radius: 50%; border: 4px solid var(--night); gap: 0; justify-content: center;
+  background: radial-gradient(circle at 35% 30%,#ffd3a3,var(--pumpkin) 55%,#c24e00); box-shadow: 0 6px 0 #6b2c00, 0 12px 30px -6px rgba(255,122,26,.8);
+  color: var(--night); font-family: var(--font-display); font-size: 11px; }
+.nav .scan-btn svg { width: 28px; height: 28px; }
+
+.board { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 6px; padding: 8px; border-radius: 24px; border: 1px solid var(--line);
+  background: linear-gradient(180deg,var(--night-4),var(--night-2)); box-shadow: 0 24px 50px -20px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.1); }
+.cell { aspect-ratio: 1; perspective: 600px; }
+.cell-inner { position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transition: transform .7s cubic-bezier(.3,1.4,.5,1); }
+.cell.open .cell-inner { transform: rotateY(180deg); }
+.cell-face { position: absolute; inset: 0; border-radius: 12px; backface-visibility: hidden; -webkit-backface-visibility: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow: hidden; }
+.cell-face.front { background: var(--night-3); border: 1px solid rgba(255,255,255,.05); box-shadow: inset 0 -3px 0 rgba(0,0,0,.4); }
+.cell-face.back { transform: rotateY(180deg); background: linear-gradient(145deg,var(--c),var(--night-2) 130%); box-shadow: inset 0 2px 0 rgba(255,255,255,.3), inset 0 -3px 0 rgba(0,0,0,.35); }
+.cell-emoji { font-size: clamp(18px,6.2vw,27px); line-height: 1.05; }
+.cell-emoji img { width: 1.2em; height: 1.2em; border-radius: 50%; object-fit: cover; }
+.cell-face.front .cell-emoji { filter: grayscale(1) opacity(.4); }
+.cell-name { font-size: 8.5px; font-weight: 800; width: 100%; text-align: center; padding: 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell-face.front .cell-name { color: var(--faint); }
+.get-tag { position: absolute; top: 3px; right: 3px; background: #fff; color: var(--night); border-radius: 999px; font-size: 6.5px; font-weight: 900; padding: 0 4px; }
+.free-face { position: absolute; inset: 0; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(135deg,var(--pumpkin-soft),var(--pumpkin) 60%,#c24e00); color: var(--night); }
+.free-face b { font-family: var(--font-display); font-weight: 400; font-size: 9px; }
+.cell.in-line .cell-face.back, .cell.in-line .free-face { box-shadow: 0 0 0 2px var(--pumpkin-soft), 0 0 18px rgba(255,122,26,.6); }
+.cell.fresh { animation: glow 1.4s ease-out .5s 2; }
+@keyframes glow { 40% { filter: drop-shadow(0 0 14px rgba(255,184,112,1)); } }
+
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat { padding: 14px; }
+.stat .v { font-family: var(--font-display); font-size: 30px; font-variant-numeric: tabular-nums; }
+.stat .v small { font-size: 13px; color: var(--faint); margin-left: 4px; }
+.bar { height: 12px; border-radius: 999px; background: rgba(11,10,16,.7); overflow: hidden; }
+.bar > div { height: 100%; border-radius: 999px; background: linear-gradient(90deg,var(--witch-deep),var(--pumpkin),var(--pumpkin-soft)); transition: width .7s; }
+.dex { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; }
+.dex-item { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 6px; text-align: center; border-radius: 18px; border: 1px solid var(--line); background: linear-gradient(180deg,var(--night-4),var(--night-2)); }
+.dex-item.unknown { border-style: dashed; background: rgba(18,16,26,.6); }
+.dex-item.secret { border-color: rgba(174,123,255,.45); background: rgba(109,46,230,.12); }
+.dex-item .nm { font-size: 11px; font-weight: 800; width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dex-item .st { font-size: 10px; font-weight: 900; color: var(--pumpkin-soft); }
+.dex-item.unknown .nm, .dex-item.unknown .st { color: var(--faint); }
+.dex-item .badge { position: absolute; top: -8px; }
+
+.tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--night-3); border-radius: 16px; padding: 4px; }
+.tabs button { border: 0; background: none; border-radius: 12px; padding: 11px 4px; font-weight: 800; font-size: 13px; color: var(--muted); }
+.tabs button[aria-selected=true] { background: var(--pumpkin); color: var(--night); }
+.camera { position: relative; aspect-ratio: 1; width: 100%; border-radius: 24px; overflow: hidden; border: 2px solid rgba(255,122,26,.6); background: #000; box-shadow: 0 0 40px -10px rgba(255,122,26,.7); }
+.camera video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.camera .frame { position: absolute; inset: 14%; border: 4px dashed rgba(255,255,255,.7); border-radius: 18px; pointer-events: none; }
+.camera .msg { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; font-weight: 800; font-size: 13px; background: rgba(11,10,16,.75); }
+.qr-box { background: #fff; padding: 12px; border-radius: 22px; width: 250px; max-width: 100%; box-shadow: 0 0 0 6px rgba(255,122,26,.9), 0 0 50px rgba(255,122,26,.5); }
+.qr-box svg, .qr-box img { display: block; width: 100%; height: auto; }
+
+.rank { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.rank li { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 16px; background: rgba(255,255,255,.05); }
+.rank li.me { background: rgba(255,122,26,.18); box-shadow: inset 0 0 0 1px var(--pumpkin-soft); }
+.rank .pos { width: 42px; text-align: center; font-family: var(--font-display); font-size: 17px; }
+.rank .nm { flex: 1; min-width: 0; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rank .val { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+.rank .val small { font-size: 10px; color: var(--faint); margin-left: 3px; }
+
+.steps { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+.step { position: relative; padding: 12px; text-align: left; }
+.step .n { position: absolute; right: 12px; top: 6px; font-family: var(--font-display); font-size: 24px; color: rgba(255,255,255,.1); }
+.step .t { font-family: var(--font-display); font-size: 15px; color: var(--pumpkin-soft); margin-top: 4px; }
+
+.overlay { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 24px; overflow: hidden; background: rgba(11,10,16,.93); backdrop-filter: blur(4px); }
+.overlay > *:not(.rays):not(.confetti) { position: relative; }
+.rays { position: absolute; width: 160vmax; height: 160vmax; background: repeating-conic-gradient(from 0deg, rgba(255,184,112,.22) 0deg 10deg, transparent 10deg 24deg); animation: spin 14s linear infinite;
+  -webkit-mask-image: radial-gradient(circle,#000 20%,transparent 65%); mask-image: radial-gradient(circle,#000 20%,transparent 65%); }
+.rays.gold { background: repeating-conic-gradient(from 0deg, rgba(245,197,66,.35) 0deg 8deg, transparent 8deg 20deg); }
+.rays.purple { background: repeating-conic-gradient(from 0deg, rgba(174,123,255,.3) 0deg 10deg, transparent 10deg 24deg); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pop { animation: pop .7s cubic-bezier(.2,1.6,.4,1) both; }
+@keyframes pop { 0% { transform: scale(.2) rotate(-12deg); opacity: 0; } 60% { transform: scale(1.12) rotate(4deg); opacity: 1; } 100% { transform: none; } }
+.float { animation: float 3s ease-in-out infinite; }
+@keyframes float { 50% { transform: translateY(-10px); } }
+.confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.confetti span { position: absolute; top: 0; animation: fall var(--d) linear var(--delay) forwards; }
+@keyframes fall { from { transform: translate3d(0,-10vh,0) rotate(0); } to { transform: translate3d(var(--x),110vh,0) rotate(720deg); } }
+.summon-circle { width: 260px; height: 260px; max-width: 100%; animation: summon 2.2s cubic-bezier(.5,0,.3,1) both; }
+@keyframes summon { 0% { transform: scale(.3) rotate(0); opacity: 0; } 30% { opacity: 1; } 100% { transform: scale(1.05) rotate(540deg); } }
+.shake { animation: shake .3s ease-in-out 2; }
+@keyframes shake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+.spinner { font-size: 44px; animation: float 1.4s ease-in-out infinite; }
+.terms { text-align: left; max-width: 420px; line-height: 1.8; font-size: 13px; overflow-y: auto; max-height: 80dvh; }
+.terms h2 { font-family: var(--font-display); font-weight: 400; font-size: 16px; margin-top: 18px; color: var(--pumpkin-soft); }
+.terms ul { padding-left: 1.2em; margin: 6px 0; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+</style>
+</head>
+<body>
+<div class="app" id="app"><div class="center"><div class="spinner">👻</div><p class="muted">読み込み中…</p></div></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ================================================================ 接続
+  const CONFIG = window.MONSTER_BINGO_CONFIG || {};
+  const SESSION_KEY = 'mb_session';
+  const POLL_MS = 4000;
+
+  async function rpc(fn, args) {
+    const response = await fetch(`${CONFIG.supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/${fn}`, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json', apikey: CONFIG.supabaseAnonKey },
+        // 旧形式の anon キー（JWT）の時だけ Authorization も付ける。新形式の Publishable key は apikey だけで通る
+        /^eyJ/.test(CONFIG.supabaseAnonKey) ? { Authorization: `Bearer ${CONFIG.supabaseAnonKey}` } : {}),
+      body: JSON.stringify(args || {}),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      const error = new Error((body && body.message) || '通信に失敗しました');
+      error.hint = body && body.hint;
+      throw error;
+    }
+    return body;
+  }
+  const storage = {
+    get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+    set(key, value) { try { localStorage.setItem(key, value); } catch (e) {} },
+    remove(key) { try { localStorage.removeItem(key); } catch (e) {} },
+  };
+
+  // ================================================================ 共通
+  const app = document.getElementById('app');
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const safeColor = (c) => (/^#[0-9a-fA-F]{6}$/.test(c || '') ? c : '#34304a');
+  const safeUrl = (u) => (/^https:\/\//.test(u || '') ? u : null);
+  function monsterGlyph(m) {
+    if (!m) return '<span>❔</span>';
+    const url = safeUrl(m.imageUrl);
+    return url ? `<img src="${esc(url)}" alt="${esc(m.name)}">` : `<span>${esc(m.emoji)}</span>`;
+  }
+  const face = (m, size, silhouette) =>
+    `<div class="face ${silhouette ? 'silhouette' : ''}" style="--c:${safeColor(m && m.color)};--s:${size}px">${monsterGlyph(m)}</div>`;
+  const badge = (m) => (m && m.rarity !== 'normal' ? `<span class="badge ${m.rarity}">${m.rarity.toUpperCase()}</span>` : '');
+  function confetti(n) {
+    const sym = ['🎃', '🦇', '👻', '✦', '●', '★'];
+    const col = ['#ff7a1a', '#ffb870', '#ae7bff', '#ffffff', '#f5c542'];
+    let h = '<div class="confetti" aria-hidden="true">';
+    for (let i = 0; i < n; i++) h += `<span style="left:${Math.random() * 100}%;font-size:${10 + Math.random() * 18}px;color:${col[i % col.length]};--d:${2.4 + Math.random() * 2.2}s;--delay:${Math.random() * 0.8}s;--x:${(Math.random() - 0.5) * 160}px">${sym[i % sym.length]}</span>`;
+    return h + '</div>';
+  }
+  function overlay(html, onClickClose) {
+    const el = document.createElement('div');
+    el.className = 'overlay';
+    el.setAttribute('role', 'dialog');
+    el.innerHTML = html;
+    if (onClickClose) el.addEventListener('click', (e) => { if (!e.target.closest('button,a')) onClickClose(el); });
+    document.body.appendChild(el);
+    return el;
+  }
+  const FOUR_STEPS = [['🗣️', '人と話す', 'まずは自己紹介！'], ['📷', '相手のQRを読む', '中央の SCAN ボタン'], ['👻', 'モンスターGET', '相手のモンスターが仲間に'], ['🎃', 'ビンゴが開く', '縦・横・斜めで BINGO!']];
+  const baseUrl = () => location.origin + location.pathname;
+
+  // ================================================================ 起動・URL
+  //   ?e=CODE … イベント参加   ?x=TOKEN … 相手のQR（標準カメラで読んだ時）   ?s=SESSION … 運営が追加した参加者のログイン
+  const params = new URLSearchParams(location.search);
+  let eventCode = params.get('e') || null;
+  let state = null;
+  let pollTimer = null;
+  let tab = (location.hash || '').replace('#', '') || 'bingo';
+  let scanTab = 'scan';
+  let freshPositions = new Set();
+  let seenAcquisitions = null;
+  const celebrationQueue = [];
+  let celebrating = false;
+
+  if (!CONFIG.supabaseUrl || CONFIG.supabaseUrl.includes('YOUR-PROJECT')) {
+    app.innerHTML = `<div class="center"><p class="spinner">🔧</p><p class="display" style="font-size:20px">接続設定がまだです</p><p class="muted">config.js に Supabase の URL と anon キーを入れてください。</p></div>`;
+    return;
+  }
+
+  async function boot() {
+    const claim = params.get('s');
+    if (claim) { storage.set(SESSION_KEY, claim); history.replaceState(null, '', baseUrl()); }
+    const scanned = params.get('x');
+    if (scanned) { history.replaceState(null, '', baseUrl()); return exchangeFromLink(scanned); }
+
+    const session = storage.get(SESSION_KEY);
+    if (session) {
+      try {
+        const current = await rpc('mb_state', { p_session: session });
+        if (!eventCode || current.event.code.toLowerCase() === eventCode.toLowerCase()) {
+          if (eventCode) history.replaceState(null, '', baseUrl() + (location.hash || ''));
+          applyState(current);
+          if (claim) return renderSummon();
+          return startGame();
+        }
+      } catch (error) {
+        if (error.hint === 'NOT_JOINED') storage.remove(SESSION_KEY);
+      }
+    }
+    if (eventCode) return renderEventTop();
+    renderCodeEntry();
+  }
+
+  // ================================================================ 参加前
+  function renderCodeEntry(errorMessage) {
+    app.innerHTML = `
+      <div class="center">
+        <p class="float" style="font-size:64px" aria-hidden="true">🎃</p>
+        <h1 class="display title-grad" style="font-size:50px;line-height:1.02">MONSTER<br>BINGO</h1>
+        <p class="muted">話しかけるほど、モンスターが集まる。</p>
+        <form class="panel" id="codeForm" style="width:100%;padding:18px;display:flex;flex-direction:column;gap:12px;margin-top:18px">
+          <label for="code" class="muted" style="text-align:left">イベントコード</label>
+          <input type="text" id="code" autocomplete="off" autocapitalize="characters" placeholder="例：HALLOWEEN" style="text-align:center;letter-spacing:.2em;font-family:var(--font-display);font-weight:400;font-size:22px">
+          ${errorMessage ? `<p class="error">${esc(errorMessage)}</p>` : ''}
+          <button class="btn">イベントに参加</button>
+        </form>
+        <p class="faint">受付のQRコードを読み取った方は、そのまま参加できます。</p>
+      </div>`;
+    document.getElementById('codeForm').onsubmit = (e) => {
+      e.preventDefault();
+      const code = document.getElementById('code').value.trim().toUpperCase();
+      if (!code) return;
+      eventCode = code;
+      history.replaceState(null, '', `${baseUrl()}?e=${encodeURIComponent(code)}`);
+      renderEventTop();
+    };
+  }
+
+  async function renderEventTop() {
+    app.innerHTML = `<div class="center"><div class="spinner">🎃</div></div>`;
+    let info;
+    try {
+      info = await rpc('mb_event_public', { p_code: eventCode, p_session: storage.get(SESSION_KEY) });
+    } catch (error) {
+      return renderCodeEntry(error.message);
+    }
+    if (info.alreadyJoined) return boot();
+    app.innerHTML = `
+      <div class="screen" style="padding-top:40px;padding-bottom:40px;min-height:100dvh">
+        <div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px">
+          <p class="eyebrow">${esc(info.name)}</p>
+          <p class="float" style="font-size:60px" aria-hidden="true">🎃</p>
+          <h1 class="display title-grad" style="font-size:50px;line-height:1.03">MONSTER<br>BINGO</h1>
+          <p class="display" style="font-size:17px">話しかけるほど、モンスターが集まる。</p>
+          <p class="muted">会場に潜むモンスターを探し出せ。</p>
+        </div>
+        <div class="steps">${FOUR_STEPS.map(([i, t, b], n) => `<div class="panel step"><span class="n">${n + 1}</span><span style="font-size:24px">${i}</span><p class="t">${t}</p><p class="faint">${b}</p></div>`).join('')}</div>
+        ${info.status === 'ended' ? `<p class="panel" style="padding:16px;text-align:center;font-weight:800">このイベントは終了しました。ありがとうございました！</p>` : `
+        <form class="panel" id="joinForm" style="padding:18px;display:flex;flex-direction:column;gap:12px">
+          <label for="nick" class="muted">ニックネーム</label>
+          <input type="text" id="nick" maxlength="20" placeholder="例：こうき" autocomplete="nickname">
+          <p class="faint">交換した相手やランキングに表示されます（20文字まで）</p>
+          ${info.askFullName ? `<label for="fullName" class="muted">お名前（任意）</label><input type="text" id="fullName" maxlength="40" autocomplete="name">` : ''}
+          <label style="display:flex;gap:10px;align-items:flex-start" class="muted"><input type="checkbox" id="agree" style="width:22px;height:22px;accent-color:#ff7a1a;flex-shrink:0">
+            <span><button type="button" id="openTerms" style="background:none;border:0;padding:0;color:var(--pumpkin-soft);text-decoration:underline;font-weight:800">利用規約・プライバシー</button>に同意します</span></label>
+          <p class="error" id="joinError" hidden></p>
+          <button class="btn" id="summon" disabled>🔮 モンスター召喚</button>
+        </form>`}
+      </div>`;
+    if (info.status === 'ended') return;
+    const nick = document.getElementById('nick');
+    const agree = document.getElementById('agree');
+    const button = document.getElementById('summon');
+    const sync = () => { button.disabled = !(nick.value.trim() && agree.checked); };
+    nick.oninput = sync; agree.onchange = sync;
+    document.getElementById('openTerms').onclick = showTerms;
+    document.getElementById('joinForm').onsubmit = async (e) => {
+      e.preventDefault();
+      if (button.disabled) return;
+      button.disabled = true; button.textContent = '召喚中…';
+      const errorBox = document.getElementById('joinError');
+      try {
+        const joined = await rpc('mb_join', { p_code: eventCode, p_nickname: nick.value, p_full_name: (document.getElementById('fullName') || {}).value || null, p_agreed: true });
+        storage.set(SESSION_KEY, joined.sessionToken);
+        history.replaceState(null, '', baseUrl());
+        applyState(await rpc('mb_state', { p_session: joined.sessionToken }));
+        renderSummon();
+      } catch (error) {
+        errorBox.hidden = false; errorBox.textContent = error.message; errorBox.classList.add('shake');
+        button.disabled = false; button.textContent = '🔮 モンスター召喚';
+      }
+    };
+  }
+
+  function showTerms() {
+    const el = overlay(`
+      <div class="terms panel" style="padding:20px">
+        <p class="display" style="font-size:20px">利用規約・プライバシー</p>
+        <h2>集める情報</h2><ul><li>ニックネーム（イベント設定により任意で氏名）</li><li>誰と・いつモンスターを交換したかの記録</li><li>ゲームの進行状況</li></ul>
+        <p>メールアドレス・電話番号・位置情報は取得しません。カメラ映像はQRの読み取りにだけ使い、送信・保存しません。</p>
+        <h2>表示される範囲</h2><p>交換した相手の画面に、あなたのニックネームとモンスターが表示されることがあります（主催者の設定により非表示の場合もあります）。ランキングが有効な場合、ニックネームと成績が参加者に表示されます。</p>
+        <h2>利用目的</h2><p>ゲームの運営、交流が少ない方へのスタッフの声かけ、不正行為の確認に使います。記録はイベント終了後、主催者が不要と判断した時点で削除されます。</p>
+        <h2>禁止事項</h2><ul><li>QRコードの画像をSNSやチャットで共有すること</li><li>会話をせずにQRだけを読み取り続けること</li><li>ほかの参加者が嫌がる声かけ・つきまとい</li></ul>
+        <button class="btn-ghost" id="closeTerms" style="margin-top:16px">閉じる</button>
+      </div>`);
+    el.querySelector('#closeTerms').onclick = () => el.remove();
+  }
+
+  // ================================================================ 召喚演出
+  function renderSummon() {
+    app.innerHTML = `
+      <div class="center">
+        <svg viewBox="0 0 200 200" class="summon-circle" aria-hidden="true">
+          <circle cx="100" cy="100" r="92" fill="none" stroke="#ae7bff" stroke-width="2"/>
+          <circle cx="100" cy="100" r="74" fill="none" stroke="#ff7a1a" stroke-width="1.5" stroke-dasharray="4 6"/>
+          <polygon points="100,12 178,146 22,146" fill="none" stroke="#ae7bff" stroke-width="1.5"/>
+          <polygon points="100,188 22,54 178,54" fill="none" stroke="#ae7bff" stroke-width="1.5"/>
+          <text x="100" y="118" text-anchor="middle" font-size="46">🔮</text>
+        </svg>
+        <p class="display glow-p" style="font-size:24px">召喚中…</p>
+      </div>`;
+    setTimeout(() => {
+      const m = state.myMonster;
+      app.innerHTML = `
+        <div class="overlay" style="position:relative;min-height:100dvh;background:none;backdrop-filter:none">
+          <div class="rays ${m && m.rarity === 'rare' ? 'gold' : ''}"></div>${confetti(40)}
+          <p class="display" style="letter-spacing:.2em;color:var(--witch)">YOUR MONSTER</p>
+          <p class="muted">あなたのモンスターは…</p>
+          <div class="pop" style="margin:28px 0"><div class="float">${face(m, 180)}</div></div>
+          <h1 class="display title-grad" style="font-size:46px">${esc(m && m.name)}</h1>
+          ${badge(m)}
+          <p class="muted" style="margin-top:14px">このモンスターを探している人がいるかも。<br>いろんな人と話してみよう！</p>
+          <button class="btn" id="next" style="max-width:300px;margin-top:28px">次へ</button>
+        </div>`;
+      document.getElementById('next').onclick = renderCardIssued;
+    }, 2300);
+  }
+
+  function renderCardIssued() {
+    app.innerHTML = `
+      <div class="center">
+        <p class="display" style="letter-spacing:.18em;color:var(--pumpkin-soft)">CARD ISSUED</p>
+        <h1 class="display" style="font-size:26px">あなた専用のビンゴカード</h1>
+        <div class="board" style="width:100%;max-width:320px">
+          ${state.card.cells.map((c, i) => `<div style="aspect-ratio:1;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;background:${c.isFree ? 'var(--pumpkin)' : 'var(--night-4)'};animation:pop .4s ${i * 0.03}s both">${c.isFree ? '🎃' : `<span style="filter:grayscale(1) opacity(.45)">${esc(c.monster ? c.monster.emoji : '?')}</span>`}</div>`).join('')}
+        </div>
+        <p class="muted">みんな配置がバラバラ。<br>モンスターを集めてラインを揃えよう！</p>
+        <button class="btn" id="how" style="max-width:300px">遊び方を見る</button>
+      </div>`;
+    document.getElementById('how').onclick = renderHowTo;
+  }
+
+  function renderHowTo() {
+    app.innerHTML = `
+      <div class="screen" style="padding-top:36px;padding-bottom:36px;min-height:100dvh">
+        <p class="display" style="text-align:center;letter-spacing:.18em;color:var(--witch)">HOW TO PLAY</p>
+        <h1 class="display" style="text-align:center;font-size:28px">やることは4つだけ</h1>
+        ${FOUR_STEPS.map(([i, t, b], n) => `<div class="panel row" style="padding:14px;animation:pop .5s ${n * 0.12}s both"><span style="font-size:30px;width:48px;text-align:center">${i}</span><div class="grow"><p class="display" style="color:var(--pumpkin-soft);font-size:17px">${n + 1}. ${t}</p><p class="faint">${b}</p></div></div>`).join('')}
+        <p class="faint" style="text-align:center">ビンゴしても終わりじゃない！全モンスター収集を目指そう。<br>同じ人との交換は1回だけです。</p>
+        <button class="btn" id="start" style="font-size:24px;margin-top:auto">START</button>
+      </div>`;
+    document.getElementById('start').onclick = () => { tab = 'bingo'; startGame(); };
+  }
+
+  // ================================================================ 状態の取得と演出
+  function applyState(next) {
+    const previous = state;
+    if (!seenAcquisitions) {
+      seenAcquisitions = new Set(next.recentAcquisitions.map((a) => a.id));
+    } else if (previous) {
+      const newOnes = next.recentAcquisitions.filter((a) => !seenAcquisitions.has(a.id)).reverse();
+      newOnes.forEach((a) => seenAcquisitions.add(a.id));
+      const wasOpen = new Set(previous.card.cells.filter((c) => c.isOpen).map((c) => c.position));
+      const opened = next.card.cells.filter((c) => c.isOpen && !wasOpen.has(c.position));
+      newOnes.forEach((a) => celebrationQueue.push({ kind: 'get', acquisition: a, opens: opened.some((c) => c.monster && c.monster.id === a.monster.id) }));
+      if (next.stats.cardCompleted && !previous.stats.cardCompleted) celebrationQueue.push({ kind: 'bingo', lines: next.stats.bingoLines, all: true });
+      else if (next.stats.bingoLines > previous.stats.bingoLines) celebrationQueue.push({ kind: 'bingo', lines: next.stats.bingoLines, all: false });
+      if (opened.length) { freshPositions = new Set(opened.map((c) => c.position)); setTimeout(() => { freshPositions = new Set(); }, 4500); }
+    }
+    state = next;
+  }
+
+  async function refresh() {
+    try {
+      applyState(await rpc('mb_state', { p_session: storage.get(SESSION_KEY) }));
+      renderGame();
+      playCelebrations();
+    } catch (error) {
+      if (error.hint === 'NOT_JOINED') { storage.remove(SESSION_KEY); stopPolling(); state = null; renderCodeEntry('参加情報が見つかりません。もう一度参加してください'); }
+    }
+  }
+  const stopPolling = () => { clearInterval(pollTimer); pollTimer = null; };
+  function startGame() {
+    renderGame();
+    stopPolling();
+    pollTimer = setInterval(() => { if (document.visibilityState === 'visible' && !scannerActive()) refresh(); }, POLL_MS);
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && pollTimer) refresh(); });
+
+  function playCelebrations() {
+    if (celebrating || !celebrationQueue.length) return;
+    celebrating = true;
+    const item = celebrationQueue.shift();
+    const done = (el) => { el.remove(); celebrating = false; playCelebrations(); };
+    if (item.kind === 'get') {
+      const m = item.acquisition.monster;
+      const title = m.rarity === 'rare' ? 'RARE MONSTER FOUND!!' : m.rarity === 'secret' ? 'SECRET MONSTER DISCOVERED' : 'MONSTER GET!';
+      overlay(`
+        <div class="rays ${m.rarity === 'rare' ? 'gold' : m.rarity === 'secret' ? 'purple' : ''}"></div>${m.rarity !== 'normal' ? confetti(50) : ''}
+        <p class="display pop ${m.rarity === 'normal' ? 'glow-o' : 'glow-p'}" style="font-size:${m.rarity === 'normal' ? 38 : 28}px">${title}</p>
+        <div class="pop" style="margin:28px 0;animation-delay:.15s"><div class="float">${face(m, 170)}</div></div>
+        <p class="display" style="font-size:22px;line-height:1.4">${item.acquisition.sourceName ? `<span style="color:var(--pumpkin-soft)">${esc(item.acquisition.sourceName)}</span>さんの<br>${esc(m.name)}をGET！` : `${esc(m.name)}を発見！`}</p>
+        <p class="muted" style="margin-top:10px">${item.opens ? '🎃 ビンゴのマスがOPEN！' : m.rarity === 'secret' ? '図鑑に秘密のページが追加された…' : '図鑑に登録しました'}</p>
+        <p class="faint" style="margin-top:34px">タップして続ける</p>`, done);
+    } else {
+      const el = overlay(`
+        <div class="rays"></div>${confetti(70)}
+        <p style="font-size:56px">🎃</p>
+        <p class="display title-grad pop" style="font-size:${item.all ? 48 : 68}px;line-height:1">${item.all ? 'ALL COMPLETE' : 'BINGO!!'}</p>
+        <p class="display pop" style="font-size:28px;margin-top:14px;animation-delay:.2s">${item.lines} LINE${item.lines > 1 ? 'S' : ''}</p>
+        <p class="muted" style="margin-top:12px">${item.all ? '全マス制覇！ あなたは真のモンスターハンター' : 'まだまだ続く！全モンスター収集を目指そう'}</p>
+        <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:300px;margin-top:30px">
+          <button class="btn" id="bShare">📸 シェアする</button><button class="btn-ghost" id="bClose">ハントを続ける</button>
+        </div>`);
+      el.querySelector('#bClose').onclick = () => done(el);
+      el.querySelector('#bShare').onclick = () => { shareImage(); };
+    }
+  }
+
+  // ================================================================ ゲーム画面
+  const NAV = [['bingo', '🎃', 'BINGO'], ['collection', '📖', 'COLLECTION'], ['scan', '', 'SCAN'], ['me', '👻', 'MY MONSTER'], ['ranking', '👑', 'RANKING']];
+  let rankingCache = null;
+  let rankingLoadedAt = 0;
+
+  function renderGame() {
+    if (!state) return;
+    if (tab === 'scan' && scannerActive()) return updateHeader(); // カメラ起動中は画面を作り直さない
+    stopScanner();
+    const s = state.stats;
+    app.innerHTML = `
+      <header class="topbar"><div class="inner">
+        <p class="display" style="font-size:16px"><span style="color:var(--pumpkin)">MONSTER</span> BINGO</p>
+        <div class="row" style="gap:6px" id="headerPills"></div>
+      </div>
+      ${state.event.status === 'draft' ? '<p class="banner">まもなく開始！ 開始の合図があるまで交換はできません</p>' : ''}
+      ${state.event.status === 'ended' ? '<p class="banner ended">イベントは終了しました。ありがとうございました！</p>' : ''}
+      </header>
+      <main class="screen" id="main">${VIEWS[tab] ? VIEWS[tab](s) : VIEWS.bingo(s)}</main>
+      <nav class="nav" aria-label="メニュー"><ul>
+        ${NAV.map(([key, ic, label]) => key === 'scan'
+          ? `<li><button class="scan-btn" data-tab="scan" aria-label="QRをスキャンしてモンスターをGET" ${tab === 'scan' ? 'aria-current="page"' : ''}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16"/></svg>SCAN</button></li>`
+          : `<li><button data-tab="${key}" ${tab === key ? 'aria-current="page"' : ''} style="${key === 'ranking' && !state.event.rankingEnabled ? 'opacity:.4' : ''}"><span class="ic">${ic}</span>${label}</button></li>`).join('')}
+      </ul></nav>`;
+    updateHeader();
+    app.querySelectorAll('[data-tab]').forEach((b) => (b.onclick = () => switchTab(b.dataset.tab)));
+    bindView();
+  }
+  function updateHeader() {
+    const el = document.getElementById('headerPills');
+    if (el) el.innerHTML = `<span class="pill">👥 ${state.stats.encounterPeople}</span><span class="pill orange">🎃 ${state.stats.bingoLines} LINE</span>`;
+  }
+  function switchTab(next) {
+    stopScanner();
+    tab = next;
+    history.replaceState(null, '', `${baseUrl()}#${next}`);
+    renderGame();
+    window.scrollTo(0, 0);
+  }
+
+  const LINES = (() => { const l = []; for (let i = 0; i < 5; i++) l.push([0, 1, 2, 3, 4].map((c) => i * 5 + c), [0, 1, 2, 3, 4].map((r) => r * 5 + i)); l.push([0, 6, 12, 18, 24], [4, 8, 12, 16, 20]); return l; })();
+
+  const VIEWS = {
+    bingo(s) {
+      const open = state.card.cells.map((c) => c.isOpen);
+      const inLine = new Set(LINES.filter((line) => line.every((p) => open[p])).flat());
+      const head = s.cardCompleted ? 'ALL COMPLETE' : s.bingoLines ? `${s.bingoLines} BINGO` : 'NO BINGO YET';
+      return `
+        <div class="row" style="align-items:flex-end">
+          <div class="grow"><p class="eyebrow">${esc(state.event.name)}</p><h1 class="display ${s.bingoLines ? 'title-grad' : ''}" style="font-size:30px">${head}</h1></div>
+          <p class="faint" style="text-align:right">OPEN<br><span class="display" style="font-size:22px;color:var(--text)">${s.openedCells}<small style="font-size:13px;color:var(--faint)">/${s.totalCells}</small></span></p>
+        </div>
+        <div class="board">${state.card.cells.map((c) => {
+          if (c.isFree) return `<div class="cell ${inLine.has(c.position) ? 'in-line' : ''}"><div class="free-face"><span style="font-size:24px">🎃</span><b>FREE</b></div></div>`;
+          const m = c.monster;
+          const glyph = m && safeUrl(m.imageUrl) ? `<img src="${esc(m.imageUrl)}" alt="">` : esc(m ? m.emoji : '?');
+          return `<div class="cell ${c.isOpen ? 'open' : ''} ${inLine.has(c.position) ? 'in-line' : ''} ${freshPositions.has(c.position) ? 'fresh' : ''}"><div class="cell-inner">
+            <div class="cell-face front"><span class="cell-emoji">${glyph}</span><span class="cell-name">${esc(m && m.name)}</span></div>
+            <div class="cell-face back" style="--c:${safeColor(m && m.color)}"><span class="cell-emoji">${glyph}</span><span class="cell-name">${esc(m && m.name)}</span><span class="get-tag">GET</span></div>
+          </div></div>`;
+        }).join('')}</div>
+        ${s.bingoLines ? '<button class="btn-ghost" data-act="share">📸 結果をシェアする</button>' : ''}
+        <div class="panel row" style="padding:14px">
+          <span style="font-size:28px">🗣️</span>
+          <div class="grow"><p class="display" style="font-size:14px;color:var(--pumpkin-soft)">人と話す → QRを読む → GET!</p><p class="faint">まだOPENしていないモンスターを持つ人を探そう</p></div>
+          <button data-tab-go="scan" class="display" style="border:0;border-radius:12px;padding:9px 12px;background:var(--pumpkin);color:var(--night)">SCAN</button>
+        </div>
+        ${state.recentAcquisitions.length ? `<p class="faint" style="letter-spacing:.2em">RECENT GET</p>
+          ${state.recentAcquisitions.slice(0, 5).map((a) => `<div class="row" style="background:rgba(255,255,255,.05);border-radius:12px;padding:8px 12px;font-weight:800;font-size:13px"><span style="font-size:20px">${esc(a.monster.emoji)}</span><span class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.sourceName ? esc(a.sourceName) + 'さんの' : ''}${esc(a.monster.name)}</span><span class="faint">${new Date(a.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span></div>`).join('')}` : ''}`;
+    },
+
+    collection(s) {
+      const left = s.speciesTotal - s.speciesFound;
+      return `
+        <section class="panel" style="padding:18px">
+          <p class="eyebrow">MONSTER COLLECTION</p>
+          <p class="display" style="font-size:38px;font-variant-numeric:tabular-nums">${s.speciesFound}<span style="font-size:18px;color:var(--faint)"> / ${s.speciesTotal}</span></p>
+          <div class="bar" style="margin-top:10px"><div style="width:${s.completionRate}%"></div></div>
+          <p class="display" style="margin-top:12px;color:var(--pumpkin-soft);font-size:18px">${left > 0 ? `あと${left}種類！` : '🎉 図鑑コンプリート！'}</p>
+        </section>
+        <div class="dex">
+          ${state.collection.map((e) => `<div class="dex-item ${e.found ? '' : 'unknown'}">${e.found ? badge(e.monster) : ''}${face(e.monster, 54, !e.found)}
+            <p class="nm">${e.found ? esc(e.monster.name) : '？？？'}</p><p class="st">${e.found ? (e.timesReceived > 1 ? 'GET ×' + e.timesReceived : 'GET') : '未発見'}</p></div>`).join('')}
+          ${Array.from({ length: state.undiscoveredSecretCount }, () => `<div class="dex-item secret"><div class="face" style="--c:#2a0f55;--s:54px"><span class="display" style="font-size:24px;color:var(--witch)">?</span></div><p class="nm" style="color:var(--witch)">SECRET</p><p class="faint">会場のどこかに…</p></div>`).join('')}
+        </div>`;
+    },
+
+    scan() {
+      const my = state.myMonster;
+      return `
+        <div class="panel row" style="padding:14px;border-color:rgba(255,122,26,.3)"><span style="font-size:28px">🗣️</span><p class="display" style="font-size:15px;line-height:1.5">まずは自己紹介してから<br><span style="color:var(--pumpkin-soft)">モンスターを交換しよう！</span></p></div>
+        <div class="tabs" role="tablist">
+          <button role="tab" data-scantab="scan" aria-selected="${scanTab === 'scan'}">📷 相手のQRを読む</button>
+          <button role="tab" data-scantab="show" aria-selected="${scanTab === 'show'}">🔳 自分のQRを見せる</button>
+        </div>
+        ${scanTab === 'scan' ? `
+          <div class="camera" id="camera"><video id="video" playsinline muted autoplay></video><div class="frame"></div>
+            <div class="msg" id="cameraMsg"><p style="font-size:34px">📷</p><p>カメラを起動します</p><button class="btn" id="startCamera" style="max-width:240px;font-size:16px;padding:12px">カメラを起動</button></div></div>
+          <p class="error" id="scanError" hidden></p>
+          <p class="faint" style="text-align:center" id="scanHint">相手の「自分のQRを見せる」画面を枠の中に映してね</p>
+          ${state.event.exchangeMode === 'both' ? `<p class="faint" style="text-align:center;color:var(--witch)">読み込むと、相手にもあなたの${esc(my && my.name)}が届きます</p>` : ''}` : `
+          <div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding-top:6px">
+            <div class="qr-box" id="myQr" role="img" aria-label="あなたのモンスターQRコード"></div>
+            <div class="row" style="background:rgba(255,255,255,.05);border-radius:16px;padding:10px 16px">${face(my, 44)}<div><p class="faint" style="letter-spacing:.2em">YOUR MONSTER</p><p class="display" style="font-size:18px">${esc(my && my.name)}</p></div></div>
+            <p class="faint" style="text-align:center">このQRはあなた専用です。<br>SNSやチャットには載せないでね。</p>
+          </div>`}`;
+    },
+
+    me(s) {
+      const my = state.myMonster;
+      const tiles = [['発見したモンスター', s.speciesFound, '/ ' + s.speciesTotal], ['BINGO', s.bingoLines, s.bingoLines === 1 ? 'LINE' : 'LINES'], ['交流人数', s.encounterPeople, 'PEOPLE'], ['コンプリート率', s.completionRate, '%']];
+      return `
+        <section style="position:relative;overflow:hidden;border-radius:28px;border:1px solid var(--line);padding:24px;text-align:center;background:linear-gradient(160deg, color-mix(in srgb, ${safeColor(my && my.color)} 65%, transparent), var(--night-2) 75%)">
+          <div class="rays" style="left:50%;top:35%;width:140%;height:140%;margin:-70% 0 0 -70%;opacity:.6"></div>
+          <p class="eyebrow" style="position:relative;color:rgba(255,255,255,.75)">あなたのモンスター</p>
+          <div class="float" style="position:relative;width:fit-content;margin:16px auto">${face(my, 140)}</div>
+          <h1 class="display" style="position:relative;font-size:36px">${esc(my && my.name)}</h1>
+          <div style="position:relative;margin-top:6px">${badge(my)}</div>
+          <p style="position:relative;margin-top:12px;font-weight:800;font-size:13px;line-height:1.7">このモンスターを探している人がいるかも。<br>いろんな人と話してみよう！</p>
+          <p class="faint" style="position:relative;margin-top:8px">${esc(state.me.nickname)} さん</p>
+        </section>
+        <div class="stats">${tiles.map(([l, v, u]) => `<div class="panel stat"><p class="faint">${l}</p><p class="v">${v}<small>${u}</small></p></div>`).join('')}</div>
+        <button class="btn-ghost" data-tab-go="scan">🔳 自分のQRを表示</button>
+        <button class="btn" data-act="share">📸 ストーリー用画像を作る</button>
+        <p class="faint" style="text-align:center">シェア画像には名前や交換相手は載りません</p>`;
+    },
+
+    ranking() {
+      if (!rankingCache || Date.now() - rankingLoadedAt > 10000) loadRanking();
+      if (!rankingCache) return `<div class="center" style="min-height:40vh"><div class="spinner">👑</div></div>`;
+      if (!rankingCache.enabled) return `<div class="panel" style="padding:32px;text-align:center;margin-top:30px"><p style="font-size:44px">🦇</p><p class="display" style="font-size:20px">ランキングは非公開です</p><p class="muted">順位より、今夜の出会いを楽しもう！</p></div>`;
+      const unit = { species: 'MONSTERS', encounters: 'PEOPLE', bingo: 'BINGO', completion: '%' }[rankingCache.metric];
+      const medal = (r) => (r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : r + '位');
+      return `
+        <h1 class="display glow-p" style="text-align:center;font-size:24px;line-height:1.3">MONSTER HUNTER<br><span style="color:var(--pumpkin-soft)">RANKING</span></h1>
+        ${rankingCache.myEntry ? `<div class="panel row" style="padding:14px;border-color:rgba(255,122,26,.4)"><p class="muted grow">あなた</p><p class="display" style="font-size:20px">${rankingCache.myEntry.rank}位 <span style="color:var(--pumpkin-soft)">${rankingCache.myEntry.value}</span><small class="faint"> ${unit}</small></p></div>` : ''}
+        <ol class="rank">${rankingCache.entries.map((r) => `<li class="${r.isMe ? 'me' : ''}"><span class="pos">${medal(r.rank)}</span><span class="nm">${esc(r.name)}</span><span class="val">${r.value}<small>${unit}</small></span></li>`).join('')}</ol>
+        ${rankingCache.entries.length ? '' : '<p class="faint" style="text-align:center">まだ誰もモンスターを見つけていません</p>'}`;
+    },
+  };
+
+  let rankingLoading = false;
+  async function loadRanking() {
+    if (rankingLoading) return;
+    rankingLoading = true;
+    try {
+      rankingCache = await rpc('mb_ranking', { p_code: state.event.code, p_session: storage.get(SESSION_KEY) });
+      rankingLoadedAt = Date.now();
+      if (tab === 'ranking') renderGame();
+    } catch (e) {} finally { rankingLoading = false; }
+  }
+
+  function bindView() {
+    app.querySelectorAll('[data-tab-go]').forEach((b) => (b.onclick = () => { if (b.dataset.tabGo === 'scan' && tab === 'me') scanTab = 'show'; switchTab(b.dataset.tabGo); }));
+    app.querySelectorAll('[data-scantab]').forEach((b) => (b.onclick = () => { stopScanner(); scanTab = b.dataset.scantab; renderGame(); }));
+    app.querySelectorAll('[data-act=share]').forEach((b) => (b.onclick = shareImage));
+    const qrBox = document.getElementById('myQr');
+    if (qrBox && window.qrcode) {
+      const qr = window.qrcode(0, 'M');
+      qr.addData(`${baseUrl()}?x=${state.qrToken}`);
+      qr.make();
+      qrBox.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+    }
+    const startButton = document.getElementById('startCamera');
+    if (startButton) { startButton.onclick = startScanner; startScanner(); }
+  }
+
+  // ================================================================ カメラでQR読み取り
+  let camera = null; // { stream, timer, busy }
+  const scannerActive = () => Boolean(camera);
+  function stopScanner() {
+    if (!camera) return;
+    clearTimeout(camera.timer);
+    camera.stream && camera.stream.getTracks().forEach((t) => t.stop());
+    camera = null;
+  }
+  async function startScanner() {
+    const video = document.getElementById('video');
+    const message = document.getElementById('cameraMsg');
+    if (!video || camera) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      message.innerHTML = '<p style="font-size:34px">📷</p><p>このブラウザではカメラが使えません。</p><p class="faint">スマホ標準のカメラで相手のQRを読んでも交換できます。</p>';
+      return;
+    }
+    camera = { stream: null, timer: null, busy: false, last: null };
+    try {
+      camera.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    } catch (error) {
+      camera = null;
+      message.innerHTML = `<p style="font-size:34px">📷</p><p>${error.name === 'NotAllowedError' ? 'カメラの使用が許可されていません' : 'カメラを起動できませんでした'}</p>
+        <p class="faint">iPhone：設定 → Safari → カメラ →「許可」<br>Android：アドレスバーの🔒 → 権限 → カメラ<br>スマホ標準のカメラで相手のQRを読んでもOK！</p>
+        <button class="btn" id="retryCamera" style="max-width:220px;font-size:15px;padding:10px">もう一度試す</button>`;
+      document.getElementById('retryCamera').onclick = startScanner;
+      return;
+    }
+    video.srcObject = camera.stream;
+    await video.play().catch(() => {});
+    message.hidden = true;
+    const detector = 'BarcodeDetector' in window ? new window.BarcodeDetector({ formats: ['qr_code'] }) : null;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    const scanFrame = async () => {
+      if (!camera) return;
+      if (!camera.busy && video.readyState >= 2) {
+        try {
+          let text = null;
+          if (detector) {
+            const codes = await detector.detect(video);
+            text = codes[0] ? codes[0].rawValue : null;
+          } else if (window.jsQR) {
+            const scale = Math.min(1, 640 / video.videoWidth);
+            canvas.width = Math.floor(video.videoWidth * scale); canvas.height = Math.floor(video.videoHeight * scale);
+            context.drawImage(video, 0, 0, canvas.width, canvas.height);
+            const image = context.getImageData(0, 0, canvas.width, canvas.height);
+            const code = window.jsQR(image.data, image.width, image.height, { inversionAttempts: 'dontInvert' });
+            text = code ? code.data : null;
+          }
+          const now = Date.now();
+          if (text && !(camera.last && camera.last.text === text && now - camera.last.at < 4000)) {
+            camera.last = { text, at: now };
+            if (navigator.vibrate) navigator.vibrate(60);
+            await handleScanned(text);
+          }
+        } catch (e) {}
+      }
+      if (camera) camera.timer = setTimeout(scanFrame, 180);
+    };
+    scanFrame();
+  }
+
+  async function handleScanned(text) {
+    camera.busy = true;
+    const errorBox = document.getElementById('scanError');
+    const hint = document.getElementById('scanHint');
+    if (hint) hint.textContent = '🎃 交換中…';
+    let result;
+    try {
+      result = await rpc('mb_exchange', { p_session: storage.get(SESSION_KEY), p_scanned: text });
+    } catch (error) {
+      result = { ok: false, message: error.message };
+    }
+    if (result.ok) {
+      stopScanner();
+      tab = 'bingo';
+      history.replaceState(null, '', `${baseUrl()}#bingo`);
+      await refresh();
+      return;
+    }
+    if (errorBox) { errorBox.hidden = false; errorBox.textContent = result.message; errorBox.classList.remove('shake'); void errorBox.offsetWidth; errorBox.classList.add('shake'); }
+    if (hint) hint.textContent = '相手の「自分のQRを見せる」画面を枠の中に映してね';
+    setTimeout(() => { if (camera) camera.busy = false; }, 1800);
+  }
+
+  // 標準カメラで相手のQR（…?x=TOKEN）を読んだ時
+  async function exchangeFromLink(token) {
+    app.innerHTML = `<div class="center"><div class="spinner">🎃</div><p class="display" style="font-size:20px">交換中…</p></div>`;
+    const session = storage.get(SESSION_KEY);
+    if (!session) {
+      app.innerHTML = `<div class="center"><p style="font-size:56px">🎟️</p><p class="display" style="font-size:20px">まずは MONSTER BINGO に参加しよう</p><p class="muted">受付のQRコード、またはイベントコードから参加してから、もう一度読み取ってね。</p><button class="btn" id="toTop" style="max-width:300px">参加する</button></div>`;
+      document.getElementById('toTop').onclick = () => renderCodeEntry();
+      return;
+    }
+    let result;
+    try { result = await rpc('mb_exchange', { p_session: session, p_scanned: token }); } catch (error) { result = { ok: false, message: error.message }; }
+    try { applyState(await rpc('mb_state', { p_session: session })); } catch (e) {}
+    if (!result.ok) {
+      app.innerHTML = `<div class="center"><p style="font-size:56px">👻</p><p class="display" style="font-size:20px">${esc(result.message)}</p><button class="btn" id="back" style="max-width:300px">カードに戻る</button></div>`;
+      document.getElementById('back').onclick = () => { tab = 'bingo'; state ? startGame() : boot(); };
+      return;
+    }
+    const r = result.received;
+    seenAcquisitions = new Set(state.recentAcquisitions.map((a) => a.id));
+    app.innerHTML = `
+      <div class="overlay" style="position:relative;min-height:100dvh;background:none;backdrop-filter:none">
+        <div class="rays ${r.monster.rarity === 'rare' ? 'gold' : r.monster.rarity === 'secret' ? 'purple' : ''}"></div>
+        <p class="display pop glow-o" style="font-size:34px">${r.monster.rarity === 'rare' ? 'RARE MONSTER FOUND!!' : r.monster.rarity === 'secret' ? 'SECRET MONSTER DISCOVERED' : 'MONSTER GET!'}</p>
+        <div class="float" style="margin:28px 0">${face(r.monster, 170)}</div>
+        <p class="display" style="font-size:22px">${r.sourceName ? esc(r.sourceName) + 'さんの' : ''}${esc(r.monster.name)}をGET！</p>
+        ${r.openedPositions.length ? '<p class="muted" style="margin-top:8px">🎃 ビンゴのマスがOPEN！</p>' : ''}
+        ${r.bingoLinesAfter > r.bingoLinesBefore ? '<p class="display title-grad" style="font-size:52px;margin-top:10px">BINGO!!</p>' : ''}
+        <button class="btn" id="toCard" style="max-width:300px;margin-top:30px">カードを見る</button>
+      </div>`;
+    document.getElementById('toCard').onclick = () => { tab = 'bingo'; startGame(); };
+  }
+
+  // ================================================================ シェア画像（9:16、名前は描かない）
+  async function shareImage() {
+    const s = state.stats;
+    const W = 1080, H = 1920;
+    const FONT = '"Dela Gothic One", "Hiragino Sans", sans-serif';
+    if (document.fonts) await document.fonts.load(`80px ${FONT}`).catch(() => {});
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    const bg = ctx.createLinearGradient(0, 0, 0, H); bg.addColorStop(0, '#1d1238'); bg.addColorStop(0.55, '#0b0a10'); bg.addColorStop(1, '#2a1406');
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 90; i++) { ctx.fillStyle = `rgba(255,255,255,${0.2 + Math.random() * 0.6})`; ctx.beginPath(); ctx.arc(Math.random() * W, Math.random() * H * 0.6, Math.random() * 2.2, 0, 7); ctx.fill(); }
+    ctx.fillStyle = '#ffe8c2'; ctx.shadowColor = 'rgba(255,200,120,.8)'; ctx.shadowBlur = 60; ctx.beginPath(); ctx.arc(860, 230, 90, 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    ctx.textAlign = 'center';
+    const text = (t, y, size, color, glow) => { ctx.font = `${size}px ${FONT}`; ctx.shadowColor = glow; ctx.shadowBlur = 40; ctx.fillStyle = color; ctx.fillText(t, W / 2, y); ctx.shadowBlur = 0; };
+    text('🎃 MONSTER BINGO 🎃', 250, 72, '#fff', 'rgba(174,123,255,.9)');
+    const g = ctx.createLinearGradient(0, 330, 0, 470); g.addColorStop(0, '#fff'); g.addColorStop(0.5, '#ffb870'); g.addColorStop(1, '#ff7a1a');
+    ctx.font = `${s.cardCompleted ? 120 : 150}px ${FONT}`; ctx.shadowColor = 'rgba(255,122,26,.9)'; ctx.shadowBlur = 50; ctx.fillStyle = g;
+    ctx.fillText(s.cardCompleted ? 'ALL COMPLETE' : s.bingoLines ? `${s.bingoLines} BINGO!!` : `${s.openedCells} OPEN`, W / 2, 470); ctx.shadowBlur = 0;
+    const gw = 760, gap = 14, cs = (gw - gap * 4) / 5, gl = (W - gw) / 2, gt = 560;
+    ctx.fillStyle = 'rgba(255,255,255,.06)'; ctx.fillRect(gl - 30, gt - 30, gw + 60, gw + 60);
+    state.card.cells.forEach((c) => {
+      const x = gl + (c.position % 5) * (cs + gap), y = gt + Math.floor(c.position / 5) * (cs + gap);
+      ctx.fillStyle = c.isOpen ? (c.monster ? safeColor(c.monster.color) : '#ff7a1a') : '#1b1826'; ctx.fillRect(x, y, cs, cs);
+      ctx.globalAlpha = c.isOpen ? 1 : 0.25; ctx.font = `${cs * 0.58}px sans-serif`; ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle';
+      ctx.fillText(c.monster ? c.monster.emoji : '🎃', x + cs / 2, y + cs / 2 + 6); ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
+    });
+    text(`${s.speciesFound} MONSTERS FOUND`, 1490, 72, '#fff', 'rgba(255,122,26,.8)');
+    ctx.font = `44px ${FONT}`; ctx.fillStyle = '#c9a6ff'; ctx.fillText(`${s.encounterPeople} PEOPLE MET · ${s.completionRate}% COMPLETE`, W / 2, 1570);
+    text('HALLOWEEN NIGHT', 1720, 64, '#ffb870', 'rgba(255,122,26,.7)');
+    ctx.font = `40px ${FONT}`; ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.fillText(state.event.name, W / 2, 1790);
+
+    const blob = await new Promise((resolve) => cv.toBlob(resolve, 'image/png'));
+    const file = new File([blob], 'monster-bingo.png', { type: 'image/png' });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'MONSTER BINGO' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    }
+    const url = URL.createObjectURL(blob);
+    const el = overlay(`<p class="display" style="font-size:20px">ストーリー用画像</p><img src="${url}" alt="MONSTER BINGO の結果画像" style="width:220px;max-width:100%;border-radius:16px;margin-top:16px;box-shadow:0 20px 50px rgba(0,0,0,.7)"><p class="muted" style="margin-top:14px">画像を長押しして保存してね</p><button class="btn-ghost" id="closeShare" style="max-width:300px;margin-top:16px">閉じる</button>`);
+    el.querySelector('#closeShare').onclick = () => { el.remove(); URL.revokeObjectURL(url); };
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
