@@ -226,9 +226,10 @@ details.panel summary { cursor: pointer; font-weight: 800; }
         <p class="faint" style="width:100%">作成すると定番モンスター24体が自動で登録されます（あとから編集可）。</p>
       </form>
       <div style="display:flex;flex-direction:column;gap:8px">
-        ${events.map((e) => `<button class="panel row" data-open="${e.id}" style="text-align:left;cursor:pointer;padding:14px">
+        ${events.map((e) => `<div class="row" style="gap:8px;flex-wrap:nowrap"><button class="panel row grow" data-open="${e.id}" style="text-align:left;cursor:pointer;padding:14px">
           <span class="status ${e.status}">${STATUS[e.status]}</span><span class="grow" style="font-weight:800">${esc(e.name)}</span>
-          <span style="font-family:monospace;color:var(--pumpkin-soft)">${esc(e.code)}</span><span class="muted">${e.participant_count}人</span></button>`).join('') || '<p class="faint" style="text-align:center">まだイベントがありません</p>'}
+          <span style="font-family:monospace;color:var(--pumpkin-soft)">${esc(e.code)}</span><span class="muted">${e.participant_count}人</span></button>
+          <button class="btn-danger" data-delete-event="${e.id}" aria-label="${esc(e.name)} を削除" title="削除" style="align-self:stretch">🗑</button></div>`).join('') || '<p class="faint" style="text-align:center">まだイベントがありません</p>'}
       </div>`;
     document.getElementById('logout').onclick = async () => { await admin('mb_admin_logout').catch(() => {}); store.remove(TOKEN_KEY); renderLogin(); };
     document.getElementById('create').onsubmit = async (e) => {
@@ -237,6 +238,29 @@ details.panel summary { cursor: pointer; font-weight: 800; }
       renderEventList();
     };
     app.querySelectorAll('[data-open]').forEach((b) => (b.onclick = () => openEvent(b.dataset.open).catch((e) => toast('⚠️ ' + e.message))));
+    app.querySelectorAll('[data-delete-event]').forEach((b) => (b.onclick = () => deleteEvent(events.find((e) => e.id === b.dataset.deleteEvent))));
+  }
+
+  // イベントの削除。参加者・交換履歴などもすべて消え、元に戻せないので、イベントコードの入力で確認する
+  function deleteEvent(e) {
+    if (!e) return;
+    const el = modal(`
+      <h2 class="display" style="font-size:18px;color:var(--bad)">イベントを削除</h2>
+      <p><b>${esc(e.name)}</b>（<span style="font-family:monospace">${esc(e.code)}</span>）</p>
+      <p class="muted">参加者 ${e.participant_count}人のデータ、カード・交換履歴・お知らせ・モンスター設定もすべて消えます。<b>元に戻せません。</b>必要なら先に「参加者データCSV」を保存してください。</p>
+      ${e.status === 'active' ? '<p class="error">⚠️ このイベントは開催中です。参加者の画面も使えなくなります。</p>' : ''}
+      <label class="field">確認のため、イベントコード <span style="font-family:monospace">${esc(e.code)}</span> を入力<input type="text" id="confirmCode" autocomplete="off" style="text-transform:uppercase"></label>
+      <div class="row"><button class="btn-ghost grow" id="cancelDelete">やめる</button><button class="btn-danger grow" id="doDelete" disabled>削除する</button></div>`);
+    const input = el.querySelector('#confirmCode');
+    const go = el.querySelector('#doDelete');
+    input.oninput = () => { go.disabled = input.value.trim().toUpperCase() !== String(e.code).toUpperCase(); };
+    el.querySelector('#cancelDelete').onclick = () => el.remove();
+    go.onclick = async () => {
+      go.disabled = true;
+      const done = await run(() => admin('mb_admin_delete_event', { p_event_id: e.id, p_confirm_code: input.value }), `「${e.name}」を削除しました`);
+      if (done) { el.remove(); renderEventList(); } else { go.disabled = false; }
+    };
+    input.focus();
   }
 
   // ---------------------------------------------------------------- イベント詳細
