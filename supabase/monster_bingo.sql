@@ -170,6 +170,12 @@ update participants p set entry_no = x.n from x where p.id = x.id;
 update participants set checked_in_at = last_seen_at where checked_in_at is null and last_seen_at is not null;
 create unique index if not exists participants_entry_no_idx on participants(event_id, entry_no);
 
+-- LINEログイン（BUZZ BASE 公式LINE の LIFF から参加）。LINE の利用者ID（sub）でその人を見分ける。
+--   1つのイベントで同じLINEアカウントは1人分だけ（機種変更・再インストールしても同じ参加者に戻れるように）
+alter table participants add column if not exists line_user_id text;
+create unique index if not exists participants_line_idx on participants(event_id, line_user_id)
+  where line_user_id is not null and deleted_at is null;
+
 -- 全体へのお知らせ。参加者の画面へは直近5件しか返さない（増え続けて毎回の応答が重くならないように）
 create table if not exists announcements (
   id bigint generated always as identity primary key,
@@ -218,20 +224,20 @@ language sql volatile set search_path = public, extensions as $$
 $$;
 
 create or replace function mb__fail(p_code text, p_message text) returns void
-language plpgsql as $$
+language plpgsql set search_path = public, extensions as $$
 begin
   raise exception using message = p_message, hint = p_code;
 end $$;
 
 create or replace function mb__display_name(p_mode text, p_nickname text, p_full_name text) returns text
-language sql immutable as $$
+language sql immutable set search_path = public, extensions as $$
   select case p_mode when 'hidden' then null
                      when 'full_name' then coalesce(nullif(trim(p_full_name), ''), p_nickname)
                      else p_nickname end
 $$;
 
 create or replace function mb__monster_json(m monsters) returns jsonb
-language sql stable as $$
+language sql stable set search_path = public, extensions as $$
   select case when m.id is null then null else jsonb_build_object(
     'id', m.id, 'name', m.name, 'emoji', m.emoji, 'imageUrl', m.image_url, 'color', m.color, 'rarity', m.rarity) end
 $$;
@@ -252,7 +258,7 @@ end $$;
 
 -- 縦5・横5・斜め2 のうち、全マス OPEN のライン数
 create or replace function mb__lines(p_card uuid) returns int
-language sql stable as $$
+language sql stable set search_path = public, extensions as $$
   with c as (select position, opened_at is not null as is_open from bingo_cells where card_id = p_card),
   l as (
     select 'r' || (position / 5) as k, is_open from c
@@ -266,7 +272,7 @@ $$;
 -- 均等ランダム配布：担当人数が最も少ない NORMAL モンスターから1体をランダムに
 --   欠席の人は数えない。数えると、欠席者が多いモンスターが「足りている」扱いになり会場で偏る
 create or replace function mb__pick_monster(p_event uuid) returns uuid
-language sql volatile as $$
+language sql volatile set search_path = public, extensions as $$
   select m.id from monsters m
   left join participants p on p.monster_id = m.id and p.deleted_at is null and p.absent_at is null
   where m.event_id = p_event and m.is_active and m.rarity = 'normal'
@@ -356,7 +362,7 @@ end $$;
 -- 獲得を記録し、該当マスを OPEN にして、ライン数を更新
 create or replace function mb__grant(p_event uuid, p_receiver uuid, p_source uuid, p_monster uuid, p_encounter uuid)
 returns jsonb
-language plpgsql as $$
+language plpgsql set search_path = public, extensions as $$
 declare
   v_card_id uuid;
   v_before int;
@@ -391,7 +397,7 @@ begin
 end $$;
 
 create or replace function mb__fraud(p_event uuid, p_participant uuid, p_kind text, p_detail jsonb, p_once_per_minute boolean default false)
-returns void language plpgsql as $$
+returns void language plpgsql set search_path = public, extensions as $$
 begin
   if p_once_per_minute and exists (
     select 1 from fraud_logs where participant_id = p_participant and kind = p_kind and created_at > now() - interval '60 seconds'
@@ -405,8 +411,8 @@ create or replace function mb__participant_stats(p_event uuid)
 returns table (id uuid, nickname text, full_name text, role text, monster_id uuid, created_at timestamptz,
                last_seen_at timestamptz, encounter_people int, species_found int, bingo_lines int, opened_cells int,
                first_bingo_at timestamptz, completed_at timestamptz,
-               entry_no int, affiliation text, checked_in_at timestamptz, absent_at timestamptz)
-language sql stable as $$
+               entry_no int, affiliation text, checked_in_at timestamptz, absent_at timestamptz, via_line boolean)
+language sql stable set search_path = public, extensions as $$
   with pairs as (
     select scanner_participant_id as pid, target_participant_id as other from encounters where event_id = p_event
     union
@@ -424,7 +430,7 @@ language sql stable as $$
   )
   select p.id, p.nickname, p.full_name, p.role, p.monster_id, p.created_at, p.last_seen_at,
          coalesce(people.n, 0), coalesce(species.n, 0), coalesce(b.bingo_lines, 0), coalesce(opened.n, 0),
-         b.first_bingo_at, b.completed_at, p.entry_no, p.affiliation, p.checked_in_at, p.absent_at
+         b.first_bingo_at, b.completed_at, p.entry_no, p.affiliation, p.checked_in_at, p.absent_at, p.line_user_id is not null
   from participants p
   left join people on people.pid = p.id
   left join species on species.pid = p.id
@@ -735,6 +741,39 @@ begin
   v_session := mb__token(32);
   update participants set session_token_hash = mb__hash(v_session) where id = p.id;
   return jsonb_build_object('ok', true, 'sessionToken', v_session, 'eventCode', ev.code);
+end $$;
+
+-- LINEログイン。ブラウザからは呼べない（service_role 専用）。
+--   呼ぶのは Supabase Edge Function「mb-line-login」だけで、そこで LINE の IDトークンを LINE のサーバーに照合してから
+--   確かめ済みの sub（LINE の利用者ID）と表示名を渡す。ブラウザが sub を名乗れると、他人になりすませてしまうため。
+--   戻り値：{ok:true, sessionToken, eventCode, isNew} ／ 初回でニックネーム未確定なら {ok:false, code:'NEED_PROFILE', suggestedName}
+create or replace function mb_line_login(p_code text, p_line_sub text, p_line_name text, p_nickname text default null, p_agreed boolean default false)
+returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare ev events; p participants; v_session text; v_joined jsonb;
+begin
+  if coalesce(p_line_sub, '') !~ '^U[0-9a-f]{32}$' then perform mb__fail('BAD_LINE_USER', 'LINEの利用者IDが正しくありません'); end if;
+  select * into ev from events where lower(code) = lower(trim(coalesce(p_code, '')));
+  if ev.id is null then return jsonb_build_object('ok', false, 'code', 'EVENT_NOT_FOUND', 'message', 'イベントが見つかりません'); end if;
+  select * into p from participants where event_id = ev.id and line_user_id = p_line_sub and deleted_at is null;
+  if p.id is not null then
+    if p.absent_at is not null then
+      return jsonb_build_object('ok', false, 'code', 'ABSENT', 'message', 'いまは参加が止まっています。受付か運営スタッフに声をかけてください');
+    end if;
+    -- 2回目以降：ログイン情報を作り直して返す（前の端末はログアウト。1人1台の前提）
+    v_session := mb__token(32);
+    update participants set session_token_hash = mb__hash(v_session), checked_in_at = coalesce(checked_in_at, now()) where id = p.id;
+    return jsonb_build_object('ok', true, 'sessionToken', v_session, 'eventCode', ev.code, 'isNew', false);
+  end if;
+  if ev.status = 'ended' then return jsonb_build_object('ok', false, 'code', 'EVENT_ENDED', 'message', 'このイベントは終了しました'); end if;
+  -- 初回：ニックネームの確認画面を出してもらう（LINE名を初期値に）
+  if nullif(trim(coalesce(p_nickname, '')), '') is null then
+    return jsonb_build_object('ok', false, 'code', 'NEED_PROFILE', 'eventName', ev.name, 'suggestedName', left(trim(coalesce(p_line_name, '')), 20));
+  end if;
+  if not coalesce(p_agreed, false) then perform mb__fail('TERMS_REQUIRED', '利用規約とプライバシーへの同意が必要です'); end if;
+  v_joined := mb__join(ev.id, p_nickname, null, 'guest', null, true);
+  update participants set line_user_id = p_line_sub where id = (v_joined->>'participantId')::uuid;
+  return jsonb_build_object('ok', true, 'sessionToken', v_joined->>'sessionToken', 'eventCode', ev.code, 'isNew', true);
 end $$;
 
 -- =====================================================================
@@ -1151,8 +1190,12 @@ begin
     execute format('revoke execute on function %s from public', fn.signature);
     if has_supabase_roles then
       execute format('revoke execute on function %s from anon, authenticated', fn.signature);
-      if fn.proname not like 'mb\_\_%' and fn.proname <> 'mb_create_admin' then
+      if fn.proname not like 'mb\_\_%' and fn.proname not in ('mb_create_admin', 'mb_line_login') then
         execute format('grant execute on function %s to anon, authenticated', fn.signature);
+      end if;
+      -- LINEログインは、IDトークンを照合する Edge Function（service_role）からだけ呼べる
+      if fn.proname = 'mb_line_login' and exists (select 1 from pg_roles where rolname = 'service_role') then
+        execute format('grant execute on function %s to service_role', fn.signature);
       end if;
     end if;
   end loop;
