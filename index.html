@@ -224,6 +224,35 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
     }
     return body;
   }
+  // ================================================================ LINEログイン（BUZZ BASE 公式LINE の LIFF から開いた時）
+  //   LIFF の SDK は LINE の中で開かれた時（またはLIFF経由の起動）だけ読み込む。普段のブラウザでは読まない（通信量と起動の速さのため）
+  const LIFF_ID = CONFIG.lineLiffId || null;
+  const IN_LINE = /\bLine\//i.test(navigator.userAgent);
+  let liffReady = false;
+  const loadScript = (src) => new Promise((resolve, reject) => { const el = document.createElement('script'); el.src = src; el.onload = resolve; el.onerror = reject; document.head.appendChild(el); });
+  async function initLiff() {
+    if (!LIFF_ID || liffReady) return liffReady;
+    try {
+      if (!window.liff) await loadScript('https://static.line-scdn.net/liff/edge/2/sdk.js');
+      await window.liff.init({ liffId: LIFF_ID });
+      liffReady = true;
+    } catch (e) { liffReady = false; }
+    return liffReady;
+  }
+  const lineLoggedIn = () => Boolean(liffReady && window.liff.isLoggedIn && window.liff.isLoggedIn());
+  // IDトークンは Edge Function で LINE のサーバーに照合する。ブラウザから LINE の利用者IDを直接名乗らせない（なりすまし防止）
+  async function lineRpc(extra) {
+    let response;
+    try {
+      response = await fetch(`${CONFIG.supabaseUrl.replace(/\/$/, '')}/functions/v1/mb-line-login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: CONFIG.supabaseAnonKey },
+        body: JSON.stringify(Object.assign({ idToken: window.liff.getIDToken(), code: eventCode }, extra || {})),
+      });
+    } catch (e) { return { ok: false, code: 'OFFLINE', message: '電波が届いていないようです' }; }
+    return (await response.json().catch(() => null)) || { ok: false, message: '通信に失敗しました' };
+  }
+
   const storage = {
     get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
     set(key, value) { try { localStorage.setItem(key, value); } catch (e) {} },
@@ -281,6 +310,13 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
   }
 
   async function boot() {
+    // LINE（LIFF）から開かれた時：SDKを初期化。liff.line.me/…?e=CODE の「?e=CODE」は初期化後のURLに戻ってくる
+    if (LIFF_ID && (IN_LINE || params.has('liff.state'))) {
+      app.innerHTML = `<div class="center"><div class="spinner">🎃</div><p class="muted">LINEで確認中…</p></div>`;
+      await initLiff();
+      const now = new URLSearchParams(location.search);
+      if (now.get('e')) eventCode = now.get('e');
+    }
     const claim = params.get('s');
     if (claim) { storage.set(SESSION_KEY, claim); history.replaceState(null, '', baseUrl()); }
     const scanned = params.get('x');
@@ -304,6 +340,58 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
     }
     if (eventCode) return renderEventTop();
     renderCodeEntry();
+  }
+
+  // ---- LINEで参加
+  async function lineJoin(nickname, agreed) {
+    app.innerHTML = `<div class="center"><div class="spinner">🎃</div><p class="muted">LINEで参加を確認中…</p></div>`;
+    const r = await lineRpc(nickname ? { nickname, agreed: Boolean(agreed) } : {});
+    if (r.ok) {
+      storage.set(SESSION_KEY, r.sessionToken);
+      eventCode = r.eventCode;
+      history.replaceState(null, '', baseUrl());
+      try { applyState(await rpc('mb_state', { p_session: r.sessionToken })); } catch (e) { return renderLineError(e.message); }
+      return r.isNew ? renderSummon() : startGame();
+    }
+    if (r.code === 'NEED_PROFILE') return renderLineProfile(r);
+    if (r.code === 'ABSENT') return renderAbsent();
+    if (r.code === 'EVENT_NOT_FOUND') { eventCode = null; return renderCodeEntry(r.message); }
+    renderLineError(r.message, r.code === 'LINE_TOKEN_INVALID');
+  }
+  function renderLineError(message, expired) {
+    app.innerHTML = `<div class="center"><p style="font-size:56px">👻</p><p class="display" style="font-size:20px">${esc(message || 'うまく参加できませんでした')}</p>
+      <button class="btn" id="lineRetry" style="max-width:300px">${expired ? '開き直す' : 'もう一度試す'}</button>
+      <button class="btn-ghost" id="lineManual" style="max-width:300px;font-size:14px">LINEを使わずに参加する</button></div>`;
+    document.getElementById('lineRetry').onclick = () => (expired ? location.reload() : lineJoin());
+    document.getElementById('lineManual').onclick = () => { liffReady = false; eventCode ? renderEventTop() : renderCodeEntry(); };
+  }
+  // 初回だけ：LINEの表示名を初期値にしたニックネームの確認
+  function renderLineProfile(r) {
+    app.innerHTML = `
+      <div class="screen" style="padding-top:40px;padding-bottom:40px;min-height:100dvh">
+        <div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px">
+          <p class="eyebrow">${esc(r.eventName || '')}</p>
+          <p class="float" style="font-size:60px" aria-hidden="true">🎃</p>
+          <h1 class="display title-grad" style="font-size:44px;line-height:1.03">MONSTER<br>BINGO</h1>
+          <p class="muted">LINEで参加します。ゲームで表示する名前を決めてね</p>
+        </div>
+        <form class="panel" id="lineForm" style="padding:18px;display:flex;flex-direction:column;gap:12px">
+          <label for="lineNick" class="muted">ニックネーム</label>
+          <input type="text" id="lineNick" maxlength="20" value="${esc(r.suggestedName || '')}" autocomplete="nickname">
+          <p class="faint">LINEの名前を入れてあります。交換した相手やランキングに表示されるので、変えたい時は書き換えてね（20文字まで）</p>
+          <label style="display:flex;gap:10px;align-items:flex-start" class="muted"><input type="checkbox" id="lineAgree" style="width:22px;height:22px;accent-color:#ff7a1a;flex-shrink:0">
+            <span><button type="button" id="lineTerms" style="background:none;border:0;padding:0;color:var(--pumpkin-soft);text-decoration:underline;font-weight:800">利用規約・プライバシー</button>に同意します</span></label>
+          <p class="faint">LINEから受け取るのは、表示名とあなたを見分けるための番号だけです。トークの内容や友だちは見えません。</p>
+          <button class="btn" id="lineGo" disabled>🔮 モンスター召喚</button>
+        </form>
+      </div>`;
+    const nick = document.getElementById('lineNick');
+    const agree = document.getElementById('lineAgree');
+    const go = document.getElementById('lineGo');
+    const sync = () => { go.disabled = !(nick.value.trim() && agree.checked); };
+    nick.oninput = sync; agree.onchange = sync;
+    document.getElementById('lineTerms').onclick = showTerms;
+    document.getElementById('lineForm').onsubmit = (e) => { e.preventDefault(); if (!go.disabled) lineJoin(nick.value, true); };
   }
 
   // 欠席扱い。ログイン情報は捨てない（運営が取り消せば、そのまま戻れるように）
@@ -402,6 +490,10 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
       return renderCodeEntry(error.message);
     }
     if (info.alreadyJoined) return boot();
+    if (lineLoggedIn() && info.status !== 'ended') return lineJoin();
+    const lineButton = LIFF_ID && LIFF_ID !== 'local' && !IN_LINE
+      ? `<a class="btn-ghost" href="https://liff.line.me/${encodeURIComponent(LIFF_ID)}?e=${encodeURIComponent(eventCode)}" style="display:block;text-align:center;text-decoration:none;background:#06c755;border-color:#06c755;color:#fff">LINEで参加する（BUZZ BASE 公式LINE）</a>`
+      : '';
     app.innerHTML = `
       <div class="screen" style="padding-top:40px;padding-bottom:40px;min-height:100dvh">
         <div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px">
@@ -422,6 +514,7 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
             <span><button type="button" id="openTerms" style="background:none;border:0;padding:0;color:var(--pumpkin-soft);text-decoration:underline;font-weight:800">利用規約・プライバシー</button>に同意します</span></label>
           <p class="error" id="joinError" hidden></p>
           <button class="btn" id="summon" disabled>🔮 モンスター召喚</button>
+          ${lineButton ? `<p class="faint" style="text-align:center">または</p>${lineButton}` : ''}
         </form>`}
       </div>`;
     if (info.status === 'ended') return;
@@ -870,6 +963,16 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
     const video = document.getElementById('video');
     const message = document.getElementById('cameraMsg');
     if (!video || camera) return;
+    // LINEの中では、LINEのQRリーダー（liff.scanCodeV2）を使う。LINEの内蔵ブラウザはカメラ映像を直接使えない機種があるため
+    if (liffReady && window.liff.isApiAvailable && window.liff.isApiAvailable('scanCodeV2')) {
+      message.innerHTML = `<p style="font-size:34px">📷</p><p>LINEのカメラで相手のQRを読み取ります</p><button class="btn" id="liffScan" style="max-width:240px;font-size:16px;padding:12px">QRを読み取る</button>`;
+      document.getElementById('liffScan').onclick = async () => {
+        let value = null;
+        try { const result = await window.liff.scanCodeV2(); value = result && result.value; } catch (e) {}
+        if (value) await exchangeText(value);
+      };
+      return;
+    }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       message.innerHTML = '<p style="font-size:34px">📷</p><p>このブラウザではカメラが使えません。</p><p class="faint">スマホ標準のカメラで相手のQRを読んでも交換できます。</p>';
       return;
@@ -922,6 +1025,12 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
 
   async function handleScanned(text) {
     camera.busy = true;
+    const ok = await exchangeText(text);
+    if (!ok) setTimeout(() => { if (camera) camera.busy = false; }, 1800);
+  }
+
+  // 読み取った中身で交換する（カメラ・LINEのQRリーダーで共通）。成功したら true
+  async function exchangeText(text) {
     const errorBox = document.getElementById('scanError');
     const hint = document.getElementById('scanHint');
     if (hint) hint.textContent = '🎃 交換中…';
@@ -942,11 +1051,11 @@ input[type=text]:focus { border-color: var(--pumpkin-soft); outline: none; }
       tab = 'bingo';
       history.replaceState(null, '', `${baseUrl()}#bingo`);
       await refresh();
-      return;
+      return true;
     }
     if (errorBox) { errorBox.hidden = false; errorBox.textContent = result.message; errorBox.classList.remove('shake'); void errorBox.offsetWidth; errorBox.classList.add('shake'); }
     if (hint) hint.textContent = '相手の「自分のQRを見せる」画面を枠の中に映してね';
-    setTimeout(() => { if (camera) camera.busy = false; }, 1800);
+    return false;
   }
 
   // 標準カメラで相手のQR（…?x=TOKEN）を読んだ時

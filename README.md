@@ -48,6 +48,15 @@ anon キーはページに載せて問題ない公開用のキーです（テー
    - 参加者用：`…/monster-bingo/?e=イベントコード`
    - 管理画面：`…/monster-bingo/admin.html`
 
+## LINEから参加する（BUZZ BASE 公式LINE）
+参加者は BUZZ BASE 公式LINE（@832dqxif）のトークやリッチメニューから開くだけで参加できます。
+- 参加リンク：`https://liff.line.me/2011953081-yO9l9mGo?e=イベントコード`（管理画面のダッシュボード「受付用QR」の下にも表示）
+- 初回だけ「LINEの名前を初期値にしたニックネーム」を確認して参加。2回目以降は、別のスマホからでも同じ参加者に戻ります
+- LINEの中では、相手のQRは LINE のQRリーダーで読み取ります
+- LINEを使わない人は、これまでどおりイベントコード＋ニックネーム、受付カード（QR／番号＋PIN）で参加できます
+
+しくみ：LINE Developers（プロバイダー BUZZ BASE）の LINEログインチャネル「MONSTER BINGO」（チャネルID 2011953081）に LIFF アプリを作成し、公式アカウント BUZZ BASE とリンク。ブラウザが受け取った LINE の IDトークンを Supabase Edge Function `mb-line-login`（`supabase/functions/mb-line-login/index.ts`）が LINE のサーバーで照合し、確かめた LINE の利用者IDでだけ `mb_line_login` を呼びます（この関数はブラウザからは呼べません）。チャネルシークレットは使いません。
+
 ## 当日の流れ
 | タイミング | やること |
 |---|---|
