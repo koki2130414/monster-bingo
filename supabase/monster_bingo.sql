@@ -1157,6 +1157,32 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
+-- イベントの削除。参加者・カード・交換履歴・お知らせなど、そのイベントのデータをすべて消す（元に戻せない）。
+--   押し間違い防止のため、イベントコードをもう一度入力してもらい、一致した時だけ消す
+create or replace function mb_admin_delete_event(p_admin_token text, p_event_id uuid, p_confirm_code text) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare ev events;
+begin
+  perform mb__require_admin(p_admin_token);
+  select * into ev from events where id = p_event_id for update;
+  if ev.id is null then perform mb__fail('EVENT_NOT_FOUND', 'イベントが見つかりません'); end if;
+  if upper(trim(coalesce(p_confirm_code, ''))) <> upper(ev.code) then
+    perform mb__fail('CONFIRM_MISMATCH', '確認のイベントコードが一致しません');
+  end if;
+  -- 外部キーの連鎖削除に任せると、モンスターを消す時点でカードのマスがまだ参照していて止まる。
+  -- 参照している側から順に消す（獲得 → 交換 → カード（マスも一緒）→ 参加者 → モンスター → イベント）
+  delete from monster_collections where event_id = ev.id;
+  delete from encounters where event_id = ev.id;
+  delete from bingo_cards where event_id = ev.id;
+  delete from fraud_logs where event_id = ev.id;
+  delete from announcements where event_id = ev.id;
+  delete from pin_login_failures where event_id = ev.id;
+  delete from participants where event_id = ev.id;
+  delete from monsters where event_id = ev.id;
+  delete from events where id = ev.id;
+  return jsonb_build_object('ok', true, 'deletedCode', ev.code);
+end $$;
+
 -- 管理者の作成・パスワード変更（SQL Editor からのみ実行できる）
 create or replace function mb_create_admin(p_email text, p_password text) returns text
 language plpgsql security definer set search_path = public, extensions as $$
