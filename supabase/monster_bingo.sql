@@ -176,6 +176,12 @@ alter table participants add column if not exists line_user_id text;
 create unique index if not exists participants_line_idx on participants(event_id, line_user_id)
   where line_user_id is not null and deleted_at is null;
 
+-- 使うモンスターの制限（当日の人数に合わせる）。
+--   来場者がモンスターの種類より少ないと、カードに載っているのに誰も持っていないモンスターが出て、そのマスは永遠に開かない。
+--   monster_pool_size が入っている間は、配布もカードも in_pool のモンスターだけで行う（null = 制限なし＝全種類）
+alter table events add column if not exists monster_pool_size integer check (monster_pool_size is null or monster_pool_size >= 1);
+alter table monsters add column if not exists in_pool boolean not null default true;
+
 -- 全体へのお知らせ。参加者の画面へは直近5件しか返さない（増え続けて毎回の応答が重くならないように）
 create table if not exists announcements (
   id bigint generated always as identity primary key,
@@ -269,13 +275,22 @@ language sql stable set search_path = public, extensions as $$
   select count(*)::int from (select k from l group by k having count(*) = 5 and bool_and(is_open)) done
 $$;
 
--- 均等ランダム配布：担当人数が最も少ない NORMAL モンスターから1体をランダムに
+-- カードに載せる（＝今回のゲームで使う）モンスター。SECRET は載せない。
+--   使うモンスターを制限している間（events.monster_pool_size が入っている間）は in_pool のものだけ
+create or replace function mb__card_monster_ids(p_event uuid) returns setof uuid
+language sql stable set search_path = public, extensions as $$
+  select m.id from monsters m join events e on e.id = m.event_id
+  where m.event_id = p_event and m.is_active and m.rarity <> 'secret'
+    and (e.monster_pool_size is null or m.in_pool)
+$$;
+
+-- 均等ランダム配布：担当人数が最も少ない NORMAL モンスターから1体をランダムに（使うモンスターを制限中はその中から）
 --   欠席の人は数えない。数えると、欠席者が多いモンスターが「足りている」扱いになり会場で偏る
 create or replace function mb__pick_monster(p_event uuid) returns uuid
 language sql volatile set search_path = public, extensions as $$
   select m.id from monsters m
   left join participants p on p.monster_id = m.id and p.deleted_at is null and p.absent_at is null
-  where m.event_id = p_event and m.is_active and m.rarity = 'normal'
+  where m.event_id = p_event and m.rarity = 'normal' and m.id in (select mb__card_monster_ids(p_event))
   group by m.id
   order by count(p.id), random()
   limit 1
@@ -291,8 +306,12 @@ declare
   v_hash text;
   v_card uuid;
 begin
-  select array_agg(id) into v_ids from monsters where event_id = p_event.id and is_active and rarity <> 'secret';
+  select array_agg(id) into v_ids from mb__card_monster_ids(p_event.id) id;
   if v_ids is null then perform mb__fail('NO_MONSTERS', 'カードに載せるモンスターが登録されていません'); end if;
+  -- 自分のモンスターは自分のカードに載せない（自分とは交換できないので、他に持っている人がいないとそのマスは開かない）
+  if array_length(v_ids, 1) > 1 then
+    v_ids := array_remove(v_ids, (select monster_id from participants where id = p_participant));
+  end if;
   for attempt in 1..50 loop
     select array_agg(x) into v_layout from (select x from unnest(v_ids) x order by random() limit v_needed) s;
     while array_length(v_layout, 1) < v_needed loop       -- 種類が足りなければ重複で埋める
@@ -303,6 +322,8 @@ begin
       v_layout := v_layout[1:12] || array[null::uuid] || v_layout[13:24];
     end if;
     v_hash := md5(array_to_string(v_layout, '|', 'FREE'));
+    -- 使うモンスターが少なすぎて違う配置が作れない時（例：2種類で自分のを除くと1種類）は、同じ配置でも作る
+    if attempt = 50 then v_hash := md5(v_hash || p_participant::text); end if;
     if not exists (select 1 from bingo_cards where event_id = p_event.id and layout_hash = v_hash) then
       insert into bingo_cards (event_id, participant_id, size, layout_hash) values (p_event.id, p_participant, 5, v_hash)
       returning id into v_card;
@@ -542,11 +563,12 @@ begin
   with got as (select monster_id, count(*)::int as times from monster_collections where participant_id = me.id group by monster_id)
   select coalesce(jsonb_agg(jsonb_build_object('monsterId', m.id, 'found', got.monster_id is not null,
            'timesReceived', coalesce(got.times, 0)) order by m.rarity = 'secret', m.sort_order, m.created_at), '[]'::jsonb),
-         count(*) filter (where m.rarity <> 'secret' and m.is_active),
-         count(*) filter (where m.rarity <> 'secret' and m.is_active and got.monster_id is not null)
+         count(*) filter (where m.id in (select mb__card_monster_ids(ev.id))),
+         count(*) filter (where m.id in (select mb__card_monster_ids(ev.id)) and got.monster_id is not null)
   into v_collection, v_species_total, v_species_found
   from monsters m left join got on got.monster_id = m.id
-  where m.event_id = ev.id and ((m.is_active and m.rarity <> 'secret') or (m.rarity = 'secret' and got.monster_id is not null));
+  -- 図鑑：今回使うモンスター＋（使わないものでも）もらったことがあるもの
+  where m.event_id = ev.id and (m.id in (select mb__card_monster_ids(ev.id)) or got.monster_id is not null);
 
   select count(*) into v_secret_left from monsters m
   where m.event_id = ev.id and m.is_active and m.rarity = 'secret'
@@ -689,12 +711,12 @@ begin
     return jsonb_build_object('enabled', false, 'metric', ev.ranking_metric, 'entries', '[]'::jsonb, 'myEntry', null);
   end if;
   me := mb__participant_by_session(p_session);
-  select count(*) into v_total from monsters where event_id = ev.id and is_active and rarity <> 'secret';
+  select count(*) into v_total from mb__card_monster_ids(ev.id);
   with s as (
     select st.*, case ev.ranking_metric
       when 'encounters' then st.encounter_people
       when 'bingo' then st.bingo_lines
-      when 'completion' then case when v_total > 0 then round(st.species_found * 100.0 / v_total)::int else 0 end
+      when 'completion' then case when v_total > 0 then least(100, round(st.species_found * 100.0 / v_total))::int else 0 end
       else st.species_found end as value
     from mb__participant_stats(ev.id) st where st.role = 'guest' and st.absent_at is null
   ), r as (
@@ -856,7 +878,8 @@ begin
        here as (select * from st where absent_at is null and checked_in_at is not null)
   select jsonb_build_object(
     'event', to_jsonb(ev),
-    'speciesTotal', (select count(*) from monsters where event_id = ev.id and is_active and rarity <> 'secret'),
+    'speciesTotal', (select count(*) from mb__card_monster_ids(ev.id)),
+    'pool', mb__pool_status(ev.id),
     'totals', jsonb_build_object(
       'participants', (select count(*) from here),
       'registered', (select count(*) from st),
@@ -914,10 +937,12 @@ begin
   if (p_data ? 'color') and (p_data->>'color') !~ '^#[0-9a-fA-F]{6}$' then perform mb__fail('INVALID_COLOR', '色は #RRGGBB で指定してください'); end if;
   if p_monster_id is null then
     if trim(coalesce(p_data->>'name', '')) = '' then perform mb__fail('NAME_REQUIRED', 'モンスター名を入力してください'); end if;
-    insert into monsters (event_id, name, emoji, image_url, color, rarity, sort_order)
+    -- 使うモンスターを制限している最中に足したモンスターは、制限をかけ直すまで使わない（勝手にカードへ混ざらないように）
+    insert into monsters (event_id, name, emoji, image_url, color, rarity, sort_order, in_pool)
     values (p_event_id, trim(p_data->>'name'), coalesce(nullif(trim(p_data->>'emoji'), ''), '👻'), v_image,
             coalesce(p_data->>'color', '#ff7a1a'), coalesce(p_data->>'rarity', 'normal'),
-            (select coalesce(max(sort_order), -1) + 1 from monsters where event_id = p_event_id))
+            (select coalesce(max(sort_order), -1) + 1 from monsters where event_id = p_event_id),
+            (select monster_pool_size is null from events where id = p_event_id))
     returning * into m;
   else
     update monsters set
@@ -1132,6 +1157,174 @@ begin
     select f.id, f.kind, f.detail, f.created_at, f.participant_id, p.nickname
     from fraud_logs f left join participants p on p.id = f.participant_id
     where f.event_id = p_event_id order by f.created_at desc limit 300) x);
+end $$;
+
+-- 使うモンスターの状況（管理画面用）。
+--   here = 当日いる人（入場済み・欠席でない）。unheld = カードの未開放マスに載っているのに、いる人が誰も持っていないモンスター
+--   （そのマスは誰とも交換できず開かない＝ビンゴできない原因）
+create or replace function mb__pool_status(p_event uuid) returns jsonb
+language sql stable set search_path = public, extensions as $$
+  with here as (
+    select * from participants where event_id = p_event and deleted_at is null and absent_at is null and checked_in_at is not null
+  ),
+  normal_total as (select count(*)::int as n from monsters where event_id = p_event and is_active and rarity = 'normal'),
+  unheld as (
+    select m.id, m.name, m.emoji from monsters m
+    where m.id in (select mb__card_monster_ids(p_event))
+      and not exists (select 1 from here h where h.monster_id = m.id)
+      and exists (select 1 from bingo_cells c join bingo_cards b on b.id = c.card_id
+                  join participants p on p.id = b.participant_id and p.deleted_at is null and p.absent_at is null
+                  where b.event_id = p_event and c.monster_id = m.id and c.opened_at is null)
+  )
+  select jsonb_build_object(
+    'poolSize', (select monster_pool_size from events where id = p_event),
+    'normalTotal', (select n from normal_total),
+    'inPlay', (select count(*) from mb__card_monster_ids(p_event)),
+    'present', (select count(*) from here),
+    'recommended', (select case when count(*) > 0 then least((select n from normal_total), count(*))::int end from here),
+    'unheld', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'name', name, 'emoji', emoji) order by name), '[]'::jsonb) from unheld))
+$$;
+
+-- 使うモンスターを N 種類に制限する（p_size が null なら制限を外して全種類に戻す）。
+--   1) 残す N 種類は「今いる人が多く持っているもの」から選ぶ（配り直す人をなるべく少なくするため）。RARE はいる人が持っていれば使う
+--   2) 使わないモンスターを持っている人のうち、まだ一度も交換していない人だけ、使うモンスターに配り直す
+--      （交換済みの人のモンスターを変えると、相手の図鑑や本人の画面と食い違うので変えない）
+--   3) 使うモンスターなのに、いる人が誰も持っていないものがあれば、交換前で同じモンスターを2人以上が持っている人から回す
+--   4) 全員のカードの「まだ開いていないマス」のうち、使わないモンスターのマスを使うモンスターに差し替える。
+--      開いたマス・ビンゴ数はそのまま（進んでいる人の成果を消さない）。すでにもらったモンスターになったマスはその場で開く
+create or replace function mb_admin_set_monster_pool(p_admin_token text, p_event_id uuid, p_size integer) returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  ev events;
+  v_normal int;
+  v_n int;
+  v_reassigned int := 0;
+  v_cells int := 0;
+  v_cards int := 0;
+  r record;
+  c record;
+  v_pool uuid[];
+  v_on_card uuid[];
+  v_got uuid[];
+  v_pick uuid;
+  v_changed boolean;
+  v_layout uuid[];
+  v_hash text;
+  v_after int;
+  v_done boolean;
+begin
+  perform mb__require_admin(p_admin_token);
+  select * into ev from events where id = p_event_id for update;
+  if ev.id is null then perform mb__fail('EVENT_NOT_FOUND', 'イベントが見つかりません'); end if;
+
+  if p_size is null then
+    update monsters set in_pool = true where event_id = ev.id;
+    update events set monster_pool_size = null, updated_at = now() where id = ev.id;
+    return jsonb_build_object('ok', true, 'poolSize', null, 'reassigned', 0, 'cardsChanged', 0, 'cellsChanged', 0,
+                              'pool', mb__pool_status(ev.id));
+  end if;
+
+  select count(*) into v_normal from monsters where event_id = ev.id and is_active and rarity = 'normal';
+  if v_normal = 0 then perform mb__fail('NO_MONSTERS', '使える通常モンスターがありません'); end if;
+  if p_size < 1 then perform mb__fail('INVALID_POOL_SIZE', '使うモンスターは1種類以上にしてください'); end if;
+  v_n := least(p_size, v_normal);
+
+  -- 1) 残すモンスターを決める
+  with ranked as (
+    select m.id, row_number() over (order by
+      (select count(*) from participants p where p.monster_id = m.id and p.deleted_at is null and p.absent_at is null and p.checked_in_at is not null) desc,
+      (select count(*) from participants p where p.monster_id = m.id and p.deleted_at is null and p.absent_at is null) desc,
+      m.sort_order, m.created_at) as rk
+    from monsters m where m.event_id = ev.id and m.is_active and m.rarity = 'normal'
+  )
+  update monsters m set in_pool = case
+      when m.rarity = 'normal' then coalesce((select rk <= v_n from ranked where ranked.id = m.id), false)
+      when m.rarity = 'rare' then exists (select 1 from participants p where p.monster_id = m.id and p.deleted_at is null
+                                          and p.absent_at is null and p.checked_in_at is not null)
+      else m.in_pool end
+  where m.event_id = ev.id;
+  update events set monster_pool_size = v_n, updated_at = now() where id = ev.id returning * into ev;
+
+  -- 2) 使わないモンスターを持つ、交換前の人を配り直す（いる人から先に。均等配布の偏りを当日いる人で整えるため）
+  for r in
+    select p.id from participants p join monsters m on m.id = p.monster_id
+    where p.event_id = ev.id and p.deleted_at is null and p.absent_at is null and m.rarity = 'normal'
+      and m.id not in (select mb__card_monster_ids(ev.id))
+      and not exists (select 1 from encounters e where e.scanner_participant_id = p.id or e.target_participant_id = p.id)
+    order by p.checked_in_at nulls last, p.entry_no
+  loop
+    update participants set monster_id = mb__pick_monster(ev.id) where id = r.id;
+    v_reassigned := v_reassigned + 1;
+  end loop;
+
+  -- 3) 誰も持っていない使うモンスターを、ダブっている交換前の人から回す
+  for r in
+    select m.id from monsters m
+    where m.event_id = ev.id and m.rarity = 'normal' and m.id in (select mb__card_monster_ids(ev.id))
+      and not exists (select 1 from participants p where p.monster_id = m.id and p.deleted_at is null and p.absent_at is null and p.checked_in_at is not null)
+    order by m.sort_order
+  loop
+    update participants set monster_id = r.id where id = (
+      select p.id from participants p
+      where p.event_id = ev.id and p.deleted_at is null and p.absent_at is null and p.checked_in_at is not null
+        and p.monster_id in (select mb__card_monster_ids(ev.id))
+        and (select count(*) from participants q where q.monster_id = p.monster_id and q.deleted_at is null
+             and q.absent_at is null and q.checked_in_at is not null) >= 2
+        and not exists (select 1 from encounters e where e.scanner_participant_id = p.id or e.target_participant_id = p.id)
+      order by (select count(*) from participants q where q.monster_id = p.monster_id and q.deleted_at is null
+                and q.absent_at is null and q.checked_in_at is not null) desc, random()
+      limit 1);
+    if found then v_reassigned := v_reassigned + 1; end if;
+  end loop;
+
+  -- 4) カードの未開放マスの差し替え
+  select array_agg(id) into v_pool from mb__card_monster_ids(ev.id) id;
+  for r in select b.id, b.participant_id, p.monster_id as own from bingo_cards b join participants p on p.id = b.participant_id
+           where b.event_id = ev.id loop
+    v_changed := false;
+    select coalesce(array_agg(distinct monster_id), '{}') into v_got from monster_collections where participant_id = r.participant_id;
+    select coalesce(array_agg(monster_id) filter (where monster_id = any(v_pool)), '{}') into v_on_card
+    from bingo_cells where card_id = r.id and not is_free;
+    for c in
+      select position from bingo_cells
+      where card_id = r.id and not is_free and opened_at is null and monster_id is not null
+        and (not (monster_id = any(v_pool))
+             -- 自分のモンスターのマスは、ほかに持っている人がいなければ開かないので差し替える
+             or (monster_id = r.own and not exists (select 1 from participants q where q.monster_id = r.own and q.id <> r.participant_id
+                                                     and q.deleted_at is null and q.absent_at is null and q.checked_in_at is not null)))
+      order by random()
+    loop
+      -- なるべく「このカードにまだ無く、まだもらっていない」モンスターにする（同じマスが固まって一度に開くのを避ける）
+      select x into v_pick from unnest(v_pool) x order by (x is not distinct from r.own), (x = any(v_on_card)), (x = any(v_got)),
+        (select count(*) from unnest(v_on_card) y where y = x), random() limit 1;
+      update bingo_cells set monster_id = v_pick where card_id = r.id and position = c.position;
+      v_on_card := v_on_card || v_pick;
+      v_cells := v_cells + 1;
+      v_changed := true;
+    end loop;
+    if v_changed then
+      v_cards := v_cards + 1;
+      -- 差し替えたマスが、もうもらっているモンスターならその場で開く
+      update bingo_cells bc set opened_at = now(), opened_by_participant_id = (
+          select mc.source_participant_id from monster_collections mc
+          where mc.participant_id = r.participant_id and mc.monster_id = bc.monster_id order by mc.created_at limit 1)
+      where bc.card_id = r.id and bc.opened_at is null and bc.monster_id = any(v_got);
+      select array_agg(monster_id order by position) into v_layout from bingo_cells where card_id = r.id;
+      v_hash := md5(array_to_string(v_layout, '|', 'FREE'));
+      if exists (select 1 from bingo_cards where event_id = ev.id and layout_hash = v_hash and id <> r.id) then
+        v_hash := md5(v_hash || r.id::text);   -- 同じ配置がもうある時は、カードごとに違う値にする（一意制約を保つ）
+      end if;
+      v_after := mb__lines(r.id);
+      select bool_and(opened_at is not null) into v_done from bingo_cells where card_id = r.id;
+      update bingo_cards set layout_hash = v_hash, bingo_lines = v_after,
+        first_bingo_at = coalesce(first_bingo_at, case when v_after > 0 then now() end),
+        completed_at = coalesce(completed_at, case when v_done then now() end)
+      where id = r.id;
+    end if;
+  end loop;
+
+  return jsonb_build_object('ok', true, 'poolSize', v_n, 'reassigned', v_reassigned, 'cardsChanged', v_cards,
+                            'cellsChanged', v_cells, 'pool', mb__pool_status(ev.id));
 end $$;
 
 create or replace function mb_admin_reset(p_admin_token text, p_event_id uuid, p_regenerate_cards boolean default false) returns jsonb
