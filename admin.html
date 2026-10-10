@@ -85,6 +85,9 @@ tr.absent td { opacity: .45; }
 .tag.wait { background: rgba(255,255,255,.08); color: var(--muted); }
 .tag.absent { background: rgba(255,154,154,.18); color: var(--bad); }
 .tag.line { background: rgba(6,199,85,.2); color: #5ee38f; }
+.pool-warn { border-color: rgba(252,211,77,.55); box-shadow: 0 0 0 1px rgba(252,211,77,.25) inset; }
+.pool-warn .warn-text { color: var(--warn); font-weight: 800; }
+.bar-row.unused { opacity: .35; }
 .banner-pause { background: rgba(252,211,77,.14); border: 1px solid rgba(252,211,77,.4); color: var(--warn); border-radius: 12px; padding: 10px 14px; font-weight: 800; }
 details.panel summary { cursor: pointer; font-weight: 800; }
 .announce-item { display: flex; gap: 8px; align-items: flex-start; padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,.05); }
@@ -336,6 +339,7 @@ details.panel summary { cursor: pointer; font-weight: 800; }
           ${[['総交流数', t.encounters, '回'], ['平均交流人数', t.averageEncounterPeople, '人'], ['BINGO達成', t.bingoAchievers, '人'], ['カード完成', t.cardCompleters, '人']]
           .map(([l, v, u]) => `<div class="panel tile"><p class="faint">${l}</p><p class="v">${v}<small>${u}</small></p></div>`).join('')}</div>
         <p class="faint" style="text-align:right">5秒ごとに自動更新（入力中は止まります）</p>
+        ${poolPanel(d.pool)}
         <form class="panel" id="announce" style="display:flex;flex-direction:column;gap:10px">
           <h2 class="display" style="font-size:16px">📣 全体へのお知らせ</h2>
           <p class="faint">参加者全員の画面の上に出ます（届くまで最大30秒ほど）。景品の受け取り場所、乾杯・集合の合図などに。</p>
@@ -348,7 +352,7 @@ details.panel summary { cursor: pointer; font-weight: 800; }
         </div>
         <div class="grid grid-2">
           <div class="panel"><h2 class="display" style="font-size:16px">モンスター別 担当人数</h2><p class="faint" style="margin:4px 0 12px">通常モンスターを均等配布（RARE / SECRET は参加者タブで手動付与）</p>
-            <div style="display:flex;flex-direction:column;gap:6px">${d.monsters.filter((m) => m.is_active).map((m) => `<div class="bar-row"><span>${esc(m.emoji)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800">${esc(m.name)}${m.rarity !== 'normal' ? ` <small style="color:var(--witch)">${RARITY[m.rarity]}</small>` : ''}</span><div class="bar"><div style="width:${m.assigned_count / maxAssigned * 100}%;background:${/^#[0-9a-f]{6}$/i.test(m.color) ? m.color : '#ff7a1a'}"></div></div><span style="text-align:right;font-family:monospace">${m.assigned_count}</span></div>`).join('')}</div></div>
+            <div style="display:flex;flex-direction:column;gap:6px">${d.monsters.filter((m) => m.is_active).map((m) => `<div class="bar-row ${d.pool.poolSize && !m.in_pool ? 'unused' : ''}" ${d.pool.poolSize && !m.in_pool ? 'title="今回は使わないモンスター"' : ''}><span>${esc(m.emoji)}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:800">${esc(m.name)}${m.rarity !== 'normal' ? ` <small style="color:var(--witch)">${RARITY[m.rarity]}</small>` : ''}</span><div class="bar"><div style="width:${m.assigned_count / maxAssigned * 100}%;background:${/^#[0-9a-f]{6}$/i.test(m.color) ? m.color : '#ff7a1a'}"></div></div><span style="text-align:right;font-family:monospace">${m.assigned_count}</span></div>`).join('')}</div></div>
           <div style="display:flex;flex-direction:column;gap:14px">
             <div class="panel" style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center"><h2 class="display" style="font-size:16px">受付用QR</h2><div class="qr">${qrSvg(joinUrl)}</div><p class="faint" style="word-break:break-all">${esc(joinUrl)}</p><p class="faint">この画面を印刷・拡大して受付に掲示してください</p>
               ${CONFIG.lineLiffId && CONFIG.lineLiffId !== 'local' ? `<div style="width:100%;border-top:1px solid var(--line);padding-top:10px;margin-top:4px"><p style="font-weight:800;color:#5ee38f">LINEから参加するリンク</p><p class="faint" style="word-break:break-all;user-select:all">https://liff.line.me/${esc(CONFIG.lineLiffId)}?e=${encodeURIComponent(ev().code)}</p><p class="faint">BUZZ BASE 公式LINE のリッチメニュー・トークに貼ると、LINEの中で開いてそのまま参加できます</p></div>` : ''}</div>
@@ -359,6 +363,7 @@ details.panel summary { cursor: pointer; font-weight: 800; }
         </div>
       </div>`;
     document.getElementById('csv').onclick = downloadCsv;
+    bindPoolPanel(d.pool);
     document.getElementById('announce').onsubmit = async (event) => {
       event.preventDefault();
       const text = document.getElementById('announceText');
@@ -379,6 +384,49 @@ details.panel summary { cursor: pointer; font-weight: 800; }
       await run(() => admin('mb_admin_reset', { p_event_id: current.eventId, p_regenerate_cards: regenerate }), 'ゲームをリセットしました');
       await loadDashboard(); renderTab();
     };
+  }
+
+  // ---- 使うモンスター（当日の人数に合わせる）
+  //   来場者がモンスターの種類より少ないと、カードに載っているのに会場の誰も持っていないモンスターが出て、そのマスは永遠に開かない。
+  //   種類数を人数以下にすると、配布もカードもその中だけになり、全員がビンゴ（カード完成）までたどり着ける
+  function poolPanel(p) {
+    const warn = p.present > 0 && p.unheld.length > 0;
+    const value = p.poolSize || p.recommended || p.normalTotal;
+    return `<div class="panel ${warn ? 'pool-warn' : ''}" id="poolPanel" style="display:flex;flex-direction:column;gap:10px">
+      <h2 class="display" style="font-size:16px">🎯 使うモンスター（当日の人数に合わせる）</h2>
+      <p>${p.poolSize ? `<b>${p.poolSize}種類に制限中</b>（カードに載るのは RARE を含め ${p.inPlay} 種類）` : `<b>制限なし</b>（通常モンスター全 ${p.normalTotal} 種類）`}
+        ・ 当日いる人 <b>${p.present}人</b>${p.recommended ? ` → おすすめ <b>${p.recommended}種類</b>` : ''}</p>
+      ${warn ? `<p class="warn-text">⚠️ カードに載っているのに、会場の誰も持っていないモンスターが ${p.unheld.length} 種類あります。そのマスは開かず、ビンゴできない人が出ます：${p.unheld.slice(0, 12).map((m) => `${esc(m.emoji)}${esc(m.name)}`).join('、')}${p.unheld.length > 12 ? ' ほか' : ''}</p>`
+        : p.present > 0 ? '<p style="color:var(--good);font-weight:800">✓ カードのモンスターは、全部会場の誰かが持っています</p>' : '<p class="faint">受付が始まると、会場にいる人数から判定します</p>'}
+      <div class="row">
+        ${p.recommended ? `<button type="button" class="btn" id="poolFit">来場人数に合わせる（${p.recommended}種類）</button>` : ''}
+        <label class="row" style="gap:6px"><input type="number" id="poolSize" min="1" max="${p.normalTotal}" value="${value}" style="width:80px" aria-label="使う種類数"> 種類</label>
+        <button type="button" class="btn-ghost" id="poolSet">この種類数にする</button>
+        ${p.poolSize ? '<button type="button" class="btn-ghost" id="poolOff">制限を外す</button>' : ''}
+      </div>
+      <p class="faint">まだ一度も交換していない人のモンスターと、全員のカードの「まだ開いていないマス」だけを差し替えます。開いたマス・ビンゴ数はそのまま。受付が落ち着いた開始前に押すのがおすすめです（途中で人が増減した時も、押し直せば整えます）。</p>
+    </div>`;
+  }
+  function bindPoolPanel(p) {
+    const apply = async (size) => {
+      const message = size == null
+        ? '使うモンスターの制限を外して、全種類に戻しますか？\n（すでに配ったカードはそのまま。これから参加する人から全種類になります）'
+        : `使うモンスターを ${size} 種類にします。\n\n・まだ交換していない人のモンスターを、使うモンスターに配り直します\n・全員のカードの「まだ開いていないマス」を、使うモンスターに差し替えます\n（開いたマス・ビンゴ数・交換の履歴はそのままです）`;
+      if (!confirm(message)) return;
+      const r = await run(() => admin('mb_admin_set_monster_pool', { p_event_id: current.eventId, p_size: size }));
+      if (r) toast(size == null ? '制限を外しました（全種類）' : `${r.poolSize}種類にしました（配り直し ${r.reassigned}人・カード ${r.cardsChanged}枚を調整）`);
+      await loadDashboard(); renderTab();
+    };
+    const fit = document.getElementById('poolFit');
+    if (fit) fit.onclick = () => apply(p.recommended);
+    document.getElementById('poolSet').onclick = () => {
+      const n = Number(document.getElementById('poolSize').value);
+      if (!Number.isInteger(n) || n < 1) return toast('⚠️ 1以上の数を入れてください');
+      if (p.present > 0 && n > p.present && !confirm(`当日いる人（${p.present}人）より多い ${n} 種類にすると、誰も持っていないモンスターが出てビンゴできない人が出ます。それでも進めますか？`)) return;
+      apply(n);
+    };
+    const off = document.getElementById('poolOff');
+    if (off) off.onclick = () => apply(null);
   }
 
   async function downloadCsv() {
@@ -453,7 +501,7 @@ details.panel summary { cursor: pointer; font-weight: 800; }
           <select id="newRarity">${rarityOptions('rare')}</select>
           <button class="btn">＋ 追加</button>
         </form>
-        <p class="faint">通常＝自動配布＆カードに登場 ／ RARE＝カードに登場・参加者タブで特定の人に付与 ／ SECRET＝カードに出ない隠しモンスター。画像URL（https）を入れると絵文字の代わりに表示。追加したモンスターは、これから参加する人のカードに入ります（既存カードはリセット時に反映）。</p>
+        <p class="faint">通常＝自動配布＆カードに登場 ／ RARE＝カードに登場・参加者タブで特定の人に付与 ／ SECRET＝カードに出ない隠しモンスター。画像URL（https）を入れると絵文字の代わりに表示。追加したモンスターは、これから参加する人のカードに入ります（既存カードはリセット時に反映）。使うモンスターを制限している間は、ダッシュボードで制限をかけ直すまで使いません。</p>
         ${monsters.map((m) => `
           <form class="panel monster-row ${m.is_active ? '' : 'inactive'}" data-monster="${m.id}">
             <input type="text" name="emoji" value="${esc(m.emoji)}" style="width:56px;text-align:center;font-size:18px" aria-label="絵文字">
@@ -461,7 +509,7 @@ details.panel summary { cursor: pointer; font-weight: 800; }
             <input type="color" name="color" value="${/^#[0-9a-f]{6}$/i.test(m.color) ? m.color : '#ff7a1a'}" aria-label="色">
             <select name="rarity" aria-label="レア度">${rarityOptions(m.rarity)}</select>
             <input type="url" name="image_url" value="${esc(m.image_url || '')}" placeholder="画像URL（任意）" class="grow" style="min-width:160px">
-            <span class="faint">担当${m.assigned_count}人</span>
+            <span class="faint">担当${m.assigned_count}人${current.dashboard.pool.poolSize && !m.in_pool && m.rarity !== 'secret' ? ' ・ <span style="color:var(--warn)">今回は使わない</span>' : ''}</span>
             <label class="row" style="gap:4px"><input type="checkbox" name="is_active" ${m.is_active ? 'checked' : ''}> 有効</label>
             <button class="btn">保存</button>
             <button type="button" class="btn-danger" data-delete="${m.id}">削除</button>
